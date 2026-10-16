@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     rootPassEnc: encrypt(rootPassword),
     rateHourlyCents: plan.hourlyRateCents,
     monthlyCapMin: plan.monthlyCapMin,
+    bandwidthGb: plan.bandwidthGb ?? 0,
     createdAt: now(),
     updatedAt: now(),
   });

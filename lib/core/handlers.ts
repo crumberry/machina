@@ -12,6 +12,7 @@ import {
 import { createBackedDisk, deleteVolume, diskVolFromId } from './disks';
 import { syncImage } from './images';
 import { settleUser } from './metering';
+import { ensureThrottleState } from './netmeter';
 import { now, newInstanceId } from './util';
 import { eq } from 'drizzle-orm';
 
@@ -141,6 +142,7 @@ async function start(job: JobCtx, log: (m: string) => void): Promise<void> {
   if (!row) throw new Error('instance row missing');
   log('starting');
   await startDomain(row.domain_name);
+  await ensureThrottleState(row.id, row.domain_name).catch(() => {});
   log('running');
   rd.prepare(`update instances set status='running', auto_suspended=0, updated_at=? where id=?`)
     .run(now(), row.id);

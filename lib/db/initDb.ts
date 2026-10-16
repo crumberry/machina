@@ -127,6 +127,35 @@ export const migrations: { version: string; sql: string }[] = [
       create index if not exists audit_ts_idx on audit(ts);
     `,
   },
+  {
+    version: '20261016_0002',
+    sql: `
+      alter table plans add column bandwidth_gb real not null default 100;
+      alter table instances add column bandwidth_gb real not null default 0;
+
+      create table if not exists net_monthly (
+        instance_id text not null,
+        month text not null,
+        rx_bytes integer not null default 0,
+        tx_bytes integer not null default 0,
+        rx_last integer not null default 0,
+        tx_last integer not null default 0,
+        throttled integer not null default 0,
+        updated_at integer not null default 0,
+        primary key (instance_id, month)
+      );
+
+      -- one-time backfill of plan allowances (versioned: runs once, never clobbers admin edits)
+      update plans set bandwidth_gb = 100  where id = 'micro';
+      update plans set bandwidth_gb = 250  where id = 'small';
+      update plans set bandwidth_gb = 500  where id = 'medium';
+      update plans set bandwidth_gb = 1000 where id = 'large';
+      -- existing instances inherit their plan's allowance
+      update instances set bandwidth_gb =
+        (select bandwidth_gb from plans where plans.id = instances.plan_id)
+        where bandwidth_gb = 0;
+    `,
+  },
 ];
 
 export function initDb(): void {

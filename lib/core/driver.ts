@@ -287,6 +287,64 @@ export async function volResize(volName: string, newGb: number): Promise<void> {
   await virsh(['vol-resize', volName, '--pool', config.vmsPool, '--capacity', `${newGb}GiB`]);
 }
 
+// ------------------------------------------------------- interface stats/tune
+
+export interface IfaceStat {
+  domain: string;
+  dev: string;
+  rxBytes: number;
+  txBytes: number;
+}
+
+/** One `domstats --interface` call for every domain; parsed per (domain, net.N). */
+export async function domNetStats(): Promise<IfaceStat[]> {
+  const out = await virsh(['domstats', '--interface']);
+  const stats: IfaceStat[] = [];
+  let domain = '';
+  const byIdx = new Map<number, { dev: string; rx: number; tx: number }>();
+  const flush = () => {
+    for (const s of byIdx.values()) {
+      if (s.dev) stats.push({ domain, dev: s.dev, rxBytes: s.rx, txBytes: s.tx });
+    }
+    byIdx.clear();
+  };
+  for (const line of out.split('\n')) {
+    let m = /^Domain: '(.+)'/.exec(line.trim());
+    if (m) { flush(); domain = m[1]; continue; }
+    m = /^\s*net\.(\d+)\.(name|rx\.bytes|tx\.bytes)=(.+)$/.exec(line);
+    if (!m || !domain) continue;
+    const idx = parseInt(m[1], 10);
+    const cur = byIdx.get(idx) ?? { dev: '', rx: 0, tx: 0 };
+    if (m[2] === 'name') cur.dev = m[3].trim();
+    else if (m[2] === 'rx.bytes') cur.rx = parseInt(m[3], 10) || 0;
+    else cur.tx = parseInt(m[3], 10) || 0;
+    byIdx.set(idx, cur);
+  }
+  flush();
+  return stats;
+}
+
+/** Live interface throttle in KB/s. 0/0 clears the limit entirely. */
+export async function tuneIface(domain: string, mac: string, inKb: number, outKb: number): Promise<void> {
+  await virsh(['domiftune', domain, mac, '--live',
+    '--inbound', String(inKb), '--outbound', String(outKb)]);
+}
+
+/** Current live averages, or null when the domain/iface is gone. */
+export async function readIfaceTune(domain: string, mac: string): Promise<{ inAvg: number; outAvg: number } | null> {
+  let out: string;
+  try {
+    out = await virsh(['domiftune', domain, mac, '--current']);
+  } catch {
+    return null;
+  }
+  const gi = (k: string): number => {
+    const m = new RegExp(`^${k}:\\s*(\\d+)`, 'm').exec(out);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  return { inAvg: gi('inbound\\.average'), outAvg: gi('outbound\\.average') };
+}
+
 export async function vmGenIdNameList(): Promise<string[]> {
   const doms = await listDomains();
   return doms.filter((d) => d.name.startsWith(config.domainPrefix)).map((d) => d.name);

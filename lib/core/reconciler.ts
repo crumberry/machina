@@ -4,6 +4,7 @@ import { config } from '@/lib/config';
 import { domState, listDomains, destroyDomain, undefineDomain } from './driver';
 import { diskVolFromId, deleteVolume } from './disks';
 import { enqueue, inFlightForInstance } from './jobs';
+import { checkQuotas } from './netmeter';
 import { now } from './util';
 import fs from 'fs';
 import fsp from 'fs/promises';
@@ -78,6 +79,9 @@ export async function reconcilePass(): Promise<{ fixed: number; suspended: numbe
 
   // 3. orphan cleanup
   results.orphans += await cleanOrphans();
+
+  // 4. bandwidth quotas (throttle/clear live limits)
+  await checkQuotas().catch((e) => console.log('[reconciler] quotas failed:', (e as Error).message));
   return results;
 }
 

@@ -10,16 +10,17 @@ import { hashPassword, newId, randToken } from '@/lib/core/crypto';
 export async function runSeed(): Promise<void> {
   const db = rawDb();
   clearSeedOnce();
-  // plans
-  const seedPlans: Array<{ id: string; name: string; vcpu: number; ram_mb: number; disk_gb: number; hourly: number }> = [
-    { id: 'micro',   name: 'Micro',   vcpu: 1, ram_mb: 1024,  disk_gb: 10, hourly: 0.30 },
-    { id: 'small',   name: 'Small',   vcpu: 2, ram_mb: 2048,  disk_gb: 20, hourly: 0.60 },
-    { id: 'medium',  name: 'Medium',  vcpu: 2, ram_mb: 4096,  disk_gb: 40, hourly: 1.20 },
-    { id: 'large',   name: 'Large',   vcpu: 4, ram_mb: 8192,  disk_gb: 80, hourly: 2.40 },
+  // plans (insert-only: admin edits via setPlan must survive restarts)
+  const seedPlans: Array<{ id: string; name: string; vcpu: number; ram_mb: number; disk_gb: number; hourly: number; bwGb: number }> = [
+    { id: 'micro',   name: 'Micro',   vcpu: 1, ram_mb: 1024,  disk_gb: 10, hourly: 0.30, bwGb: 100 },
+    { id: 'small',   name: 'Small',   vcpu: 2, ram_mb: 2048,  disk_gb: 20, hourly: 0.60, bwGb: 250 },
+    { id: 'medium',  name: 'Medium',  vcpu: 2, ram_mb: 4096,  disk_gb: 40, hourly: 1.20, bwGb: 500 },
+    { id: 'large',   name: 'Large',   vcpu: 4, ram_mb: 8192,  disk_gb: 80, hourly: 2.40, bwGb: 1000 },
   ];
-  const reg = db.prepare(`insert or replace into plans (id,name,vcpu,ram_mb,disk_gb,hourly_rate_cents,monthly_cap_min,active)
-    values (?,?,?,?,?,?,720,1)`);
-  for (const p of seedPlans) reg.run(p.id, p.name, p.vcpu, p.ram_mb, p.disk_gb, Math.round(p.hourly * 100));
+  const reg = db.prepare(`insert into plans (id,name,vcpu,ram_mb,disk_gb,hourly_rate_cents,monthly_cap_min,bandwidth_gb,active)
+    values (?,?,?,?,?,?,720,?,1)
+    on conflict(id) do nothing`);
+  for (const p of seedPlans) reg.run(p.id, p.name, p.vcpu, p.ram_mb, p.disk_gb, Math.round(p.hourly * 100), p.bwGb);
 
   // admin user
   const adminName = process.env.ADMIN_USER || 'admin';

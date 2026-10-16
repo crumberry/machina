@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { enqueue } from '@/lib/core/jobs';
 import { now } from '@/lib/core/util';
 import { decrypt } from '@/lib/core/crypto';
+import { bandState } from '@/lib/core/netmeter';
 import { logAudit } from '@/lib/services/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -30,6 +31,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     rootPassEnc: undefined,
     vnc_pass: undefined,
     rootPassword: inst.rootPassEnc ? decrypt(inst.rootPassEnc) : null, // owner/admin session only
+    bw: bandState(inst.id, inst.bandwidthGb ?? 0),
     jobs,
   });
 }

@@ -10,6 +10,7 @@ import { ensureDbReady, rawDb } from '@/lib/db';
 import { runSeed } from '@/lib/db/seed';
 import { startWorker, stopWorker } from '@/lib/core/worker';
 import { startMetering, stopMetering } from '@/lib/core/metering';
+import { startNetmeter, stopNetmeter } from '@/lib/core/netmeter';
 import { startReconciler, stopReconciler } from '@/lib/core/reconciler';
 import { verifyToken, type WsChannel } from '@/lib/core/tokens';
 import { relayTerm } from '@/lib/core/terminal';
@@ -59,11 +60,12 @@ async function main(): Promise<void> {
 
   startWorker();
   startMetering();
+  startNetmeter();
   startReconciler();
 
   const shutdown = () => {
     console.log('[machina] shutting down');
-    stopWorker(); stopMetering(); stopReconciler();
+    stopWorker(); stopMetering(); stopNetmeter(); stopReconciler();
     wss.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000).unref();

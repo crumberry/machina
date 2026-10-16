@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, unique, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, unique, index, primaryKey } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -18,6 +18,8 @@ export const plans = sqliteTable('plans', {
   diskGb: integer('disk_gb').notNull(),
   hourlyRateCents: integer('hourly_rate_cents').notNull(),
   monthlyCapMin: integer('monthly_cap_min').default(720).notNull(),
+  // Monthly transfer allowance in GB (rx+tx combined). 0 = unlimited.
+  bandwidthGb: real('bandwidth_gb').default(100).notNull(),
   active: integer('active').default(1).notNull(),
 });
 
@@ -54,6 +56,8 @@ export const instances = sqliteTable('instances', {
   name: text('name').notNull(), // per-user unique display name
   rateHourlyCents: integer('rate_hourly_cents').notNull().default(0),
   monthlyCapMin: integer('monthly_cap_min').notNull().default(720),
+  // Snapshot of the plan's bandwidth allowance at provision time. 0 = unlimited.
+  bandwidthGb: real('bandwidth_gb').notNull().default(0),
   // provisioning | running | stopped | suspended | error
   status: text('status').default('provisioning').notNull(),
   mac: text('mac').notNull(),
@@ -121,6 +125,21 @@ export const audit = sqliteTable('audit', {
   target: text('target'),
   detail: text('detail'),
 }, (t) => [index('audit_ts_idx').on(t.ts)]);
+
+/** Monthly transfer accounting per instance. rx/tx are accumulated DELTAS
+ *  (bytes actually moved this month); rxLast/txLast anchor the libvirt
+ *  cumulative counters between samples (counter resets on domain restart
+ *  are absorbed by clamping). throttled = live domiftune limit in place. */
+export const netMonthly = sqliteTable('net_monthly', {
+  instanceId: text('instance_id').notNull(),
+  month: text('month').notNull(), // YYYY-MM
+  rxBytes: integer('rx_bytes').default(0).notNull(),
+  txBytes: integer('tx_bytes').default(0).notNull(),
+  rxLast: integer('rx_last').default(0).notNull(),
+  txLast: integer('tx_last').default(0).notNull(),
+  throttled: integer('throttled').default(0).notNull(),
+  updatedAt: integer('updated_at').default(0).notNull(),
+}, (t) => [primaryKey({ columns: [t.instanceId, t.month] })]);
 
 export type User = typeof users.$inferSelect;
 export type Instance = typeof instances.$inferSelect;

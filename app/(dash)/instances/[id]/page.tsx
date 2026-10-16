@@ -6,7 +6,12 @@ type Inst = {
   id: string; name: string; status: string; ip: string; mac: string;
   imageId: string; planId: string; rootPassword?: string;
   autoSuspended: number; rateHourlyCents: number; createdAt: number;
+  bw?: { month: string; rxBytes: number; txBytes: number; quotaGb: number; throttled: boolean };
 };
+
+function fmtGb(bytes: number): string {
+  return (bytes / 1024 / 1024 / 1024).toFixed(2);
+}
 type Job = { id: string; type: string; status: string; error: string; createdAt: number };
 type WsState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 
@@ -68,6 +73,10 @@ export default function InstanceDetail() {
           <span className={`badge ${inst.status}`}>{inst.status}</span>
           <span className="mono">{inst.ip}</span>
           <span className="muted">{(inst.rateHourlyCents / 100).toFixed(2)}/h</span>
+          {inst.bw && inst.bw.quotaGb > 0
+            ? <span className="mono muted">bw {fmtGb(inst.bw.rxBytes + inst.bw.txBytes)}/{inst.bw.quotaGb}GB</span>
+            : null}
+          {inst.bw?.throttled ? <span className="badge suspended">throttled (bandwidth)</span> : null}
           {inst.autoSuspended ? <span className="badge suspended">auto-suspended (balance)</span> : null}
           <div className="spacer" />
           {['running', 'suspended'].includes(inst.status)

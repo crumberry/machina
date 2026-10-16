@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     op?: string; userId?: string; deltaCents?: number;
     name?: string; password?: string; role?: string;
-    planId?: string; vcpu?: number; ramMb?: number; diskGb?: number; hourlyRateCents?: number; monthlyCapMin?: number;
+    planId?: string; vcpu?: number; ramMb?: number; diskGb?: number; hourlyRateCents?: number; monthlyCapMin?: number; bandwidthGb?: number;
     imageId?: string;
   };
   switch (body.op) {
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
         diskGb: body.diskGb ?? p[0].diskGb,
         hourlyRateCents: body.hourlyRateCents ?? p[0].hourlyRateCents,
         monthlyCapMin: body.monthlyCapMin ?? p[0].monthlyCapMin,
+        bandwidthGb: body.bandwidthGb ?? p[0].bandwidthGb,
       }).where(eq(plans.id, body.planId));
       await logAudit({ actorId: admin.id, actorName: admin.name, action: 'admin.setPlan', target: body.planId });
       return json({ ok: true });
