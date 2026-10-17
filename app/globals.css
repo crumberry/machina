@@ -42,12 +42,7 @@ button, input, select, a, tr {
   height: 52px; border-bottom: 1px solid var(--line);
   position: sticky; top: 0; background: var(--bg); z-index: 10;
 }
-.topnav .brand { font-weight: 600; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 8px; }
-.topnav .brand::before {
-  content: ''; width: 9px; height: 9px; border-radius: 3px;
-  background: linear-gradient(135deg, var(--accent), #7dd3fc);
-  box-shadow: 0 0 8px rgba(45, 212, 191, 0.4);
-}
+.topnav .brand { font-weight: 600; letter-spacing: 0.02em; }
 .topnav nav { display: flex; gap: 4px; }
 .topnav nav a { color: var(--text-2); font-size: 14px; padding: 4px 10px; border-radius: 6px; }
 .topnav nav a:hover { color: var(--text); background: var(--surface); }
@@ -241,3 +236,35 @@ td[onclick]:hover, [data-copy]:hover { color: var(--text); }
 .busybtn { display: inline-flex; gap: 8px; align-items: center; }
 .navuser { display: inline-flex; align-items: center; gap: 8px; }
 .navuser svg, .navuser img { display: block; border-radius: 50%; }
+
+/* status dots */
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.status-dot.running { background: var(--ok); box-shadow: 0 0 6px rgba(74, 222, 128, 0.45); }
+.status-dot.stopped, .status-dot.suspended { background: var(--warn); }
+.status-dot.provisioning { background: var(--accent); animation: status-pulse 1.2s ease-in-out infinite; }
+@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* profile dropdown trigger */
+.profilebtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px 3px 4px; cursor: pointer; color: var(--text); font-size: 13px;
+}
+.profilebtn:hover { border-color: var(--text-3); background: var(--surface); }
+.profilemenu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 180px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.35); z-index: 50; }
+.profilemenu a, .profilemenu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 6px;
+  color: var(--text); background: transparent; border: none; cursor: pointer; font-size: 13px; }
+.profilemenu a:hover, .profilemenu button:hover { background: var(--surface-2); }
+.profilemenu .sep { height: 1px; background: var(--line); margin: 6px 0; }
+
+/* home vm list rows */
+.vmrow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.vmrow:last-child { border-bottom: none; }
+.vmrow:hover { background: rgba(255,255,255,0.015); }
+
+/* stat cards */
+.statcard { padding: 14px; }
+.statcard .label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.statcard .value { font-family: 'JetBrains Mono', monospace; font-size: 22px; margin-top: 4px; font-variant-numeric: tabular-nums; }

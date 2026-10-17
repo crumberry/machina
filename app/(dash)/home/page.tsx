@@ -58,22 +58,10 @@ export default function HomePage() {
       <div className="sub">your homelab at a glance</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <div className="card" style={{ padding: 14 }}>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>balance</div>
-          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>${balance !== null ? (balance / 100).toFixed(2) : '—'}</div>
-        </div>
-        <div className="card" style={{ padding: 14 }}>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>running</div>
-          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{running}<span className="muted" style={{ fontSize: 12 }}> / {insts.length}</span></div>
-        </div>
-        <div className="card" style={{ padding: 14 }}>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>stopped</div>
-          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{stopped}</div>
-        </div>
-        <div className="card" style={{ padding: 14 }}>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>pending requests</div>
-          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{pendingReqs}</div>
-        </div>
+        <div className="card statcard"><div className="label">balance</div><div className="value">${balance !== null ? (balance / 100).toFixed(2) : '—'}</div></div>
+        <div className="card statcard"><div className="label">running</div><div className="value">{running}<span className="muted" style={{ fontSize: 12 }}> / {insts.length}</span></div></div>
+        <div className="card statcard"><div className="label">stopped</div><div className="value">{stopped}</div></div>
+        <div className="card statcard"><div className="label">pending requests</div><div className="value">{pendingReqs}</div></div>
       </div>
 
       <div className="card">
@@ -87,8 +75,7 @@ export default function HomePage() {
           const samples = spark[i.id] ?? [];
           const data = samples.map((s) => ({ v: s.running ? s.weight * 100 : 0 }));
           return (
-            <Link key={i.id} href={`/instances/${i.id}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+            <Link key={i.id} href={`/instances/${i.id}`} className="vmrow" style={{ textDecoration: 'none', color: 'inherit' }}>
                 <span className={`status-dot ${i.status === 'running' ? 'running' : i.status === 'stopped' ? 'stopped' : 'provisioning'}`} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500 }}>{i.name}</div>
@@ -108,7 +95,6 @@ export default function HomePage() {
                   </ResponsiveContainer>
                 </div>
                 <span className="muted mono" style={{ fontSize: 11, minWidth: 70, textAlign: 'right' }}>{i.status}</span>
-              </div>
             </Link>
           );
         })}

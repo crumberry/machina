@@ -168,7 +168,7 @@ export default function InstancesPage() {
           const samples = spark[i.id] ?? [];
           const data = samples.map((s) => ({ v: s.running ? Math.max(1, s.weight * 100) : 0 }));
           return (
-            <div key={i.id} className="card" style={{ padding: 14, position: 'relative', overflow: 'hidden' }}>
+            <div key={i.id} className="card" style={{ padding: 14, margin: 0, position: 'relative', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <Link href={`/instances/${i.id}`} style={{ fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{i.name}</Link>
                 <span className={`status-dot ${i.status === 'running' ? 'running' : i.status === 'stopped' ? 'stopped' : 'provisioning'}`} />
