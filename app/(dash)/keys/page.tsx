@@ -3,8 +3,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToast } from '@/app/ui/toast';
+import { copyText } from '@/app/ui/clipboard';
+import { relTime } from '@/app/ui/time';
 
 type Key = { id: string; label: string; pubKey: string; createdAt: number };
+
+function keyAlgo(pk: string): string | null {
+  const t = pk.trim().split(/\s+/)[0];
+  if (!t || !pk.includes(' ')) return null;
+  if (/^ssh-(ed25519|rsa)$/.test(t)) return t.slice(4);
+  if (/^sk-ssh/.test(t)) return 'fido2';
+  if (/^ecdsa-sha2-\S+$/.test(t)) return 'ecdsa';
+  return null;
+}
 
 export default function KeysPage() {
   const toast = useToast();
@@ -57,7 +68,11 @@ export default function KeysPage() {
             </div>
             <div style={{ flex: 3, minWidth: 260 }}>
               <label htmlFor="k">public key</label>
-              <input id="k" value={pubKey} onChange={(e) => setPubKey(e.target.value)} placeholder="ssh-ed25519 AAAA… me@host" className="mono" />
+              <input id="k" value={pubKey} onChange={(e) => setPubKey(e.target.value)} placeholder="ssh-ed25519 AAAA… me@host" className="mono"
+                style={pubKey && !keyAlgo(pubKey) ? { borderColor: 'var(--warn)' } : undefined} />
+              {pubKey && !keyAlgo(pubKey)
+                ? <div className="muted" style={{ marginTop: 4, color: 'var(--warn)' }}>doesn't look like an OpenSSH public key line</div>
+                : null}
             </div>
             <button className="primary" type="submit" disabled={busy || !pubKey}>
               {busy ? (
@@ -74,17 +89,25 @@ export default function KeysPage() {
       <div className="card">
         <h3>keys</h3>
         <table>
-          <thead><tr><th>label</th><th>key</th><th>added</th><th /></tr></thead>
+          <thead><tr><th>label</th><th>algo</th><th>key</th><th>added</th><th /></tr></thead>
           <tbody>
             {keys.map((k) => (
               <tr key={k.id}>
                 <td>{k.label}</td>
-                <td className="mono">{k.pubKey.slice(0, 60)}{k.pubKey.length > 60 ? '…' : ''}</td>
-                <td>{new Date(k.createdAt).toLocaleDateString()}</td>
-                <td><button className="danger" onClick={() => del(k.id)}>remove</button></td>
+                <td>{keyAlgo(k.pubKey)
+                  ? <span className="badge" style={{ color: 'var(--accent)' }}>{keyAlgo(k.pubKey)}</span>
+                  : <span className="copy">—</span>}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{k.pubKey.slice(0, 42)}…</td>
+                <td title={new Date(k.createdAt).toLocaleString()}>{relTime(k.createdAt)}</td>
+                <td>
+                  <div className="soundboard">
+                    <button onClick={() => void copyText(k.pubKey, toast.ok, 'key copied')}>copy</button>
+                    <button className="danger" onClick={() => del(k.id)}>remove</button>
+                  </div>
+                </td>
               </tr>
             ))}
-            {keys.length === 0 && <tr><td colSpan={4} className="muted">no keys</td></tr>}
+            {keys.length === 0 && <tr><td colSpan={5} className="empty">no keys — add one above, it lands in the next instance you create</td></tr>}
           </tbody>
         </table>
       </div>

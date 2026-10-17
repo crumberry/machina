@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { relTime } from '@/app/ui/time';
 
 type Ledger = {
   id: string; deltaCents: number; reason: string; note: string | null;
@@ -30,11 +31,16 @@ export default function BillingPage() {
         <div className="grid3" style={{ alignItems: 'center' }}>
           <div>
             <div className="muted">balance</div>
-            <div style={{ fontSize: 30, fontWeight: 600 }}>{balance === null ? '…' : `$${(balance / 100).toFixed(2)}`}</div>
+            <div className="mono" style={{ fontSize: 30, fontWeight: 600 }}>
+              {balance === null ? '…' : `$${(balance / 100).toFixed(2)}`}
+            </div>
+            {balance !== null && balance < 100
+              ? <span className="badge suspended" title="auto-suspends when it hits zero">low balance</span>
+              : null}
           </div>
           <div>
             <div className="muted">host capacity</div>
-            <div>{cap ? `${cap.running}/${cap.max} running` : '…'}</div>
+            <div>{cap ? <span className="mono">{cap.running}/{cap.max}</span> : '…'} <span className="copy">running</span></div>
           </div>
         </div>
       </div>
@@ -45,7 +51,7 @@ export default function BillingPage() {
           <tbody>
             {ledger.map((l) => (
               <tr key={l.id}>
-                <td>{new Date(l.createdAt).toLocaleString()}</td>
+                <td title={new Date(l.createdAt).toLocaleString()}>{relTime(l.createdAt)}</td>
                 <td>{l.reason}</td>
                 <td className="mono" style={{ color: l.deltaCents >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
                   {l.deltaCents >= 0 ? '+' : ''}{(l.deltaCents / 100).toFixed(2)}
@@ -53,7 +59,7 @@ export default function BillingPage() {
                 <td className="copy">{l.note ?? '—'}</td>
               </tr>
             ))}
-            {ledger.length === 0 && <tr><td colSpan={4} className="muted">no movements yet</td></tr>}
+            {ledger.length === 0 && <tr><td colSpan={4} className="empty">no movements yet</td></tr>}
           </tbody>
         </table>
       </div>

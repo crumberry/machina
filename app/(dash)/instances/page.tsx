@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { BorderBeam } from 'border-beam';
 import { useToast } from '@/app/ui/toast';
+import { copyText } from '@/app/ui/clipboard';
 import { loadStart, loadEnd } from '@/app/ui/loadbar';
 
 type Inst = {
@@ -99,7 +100,8 @@ export default function InstancesPage() {
             <div className="row">
               <div style={{ flex: 1, minWidth: 180 }}>
                 <label htmlFor="n">name (lowercase, dash)</label>
-                <input id="n" value={name} onChange={(e) => setName(e.target.value)} placeholder="dev-box" />
+                <input id="n" value={name} onChange={(e) => setName(e.target.value)} placeholder="dev-box"
+                  pattern="[a-z0-9-]+" title="lowercase letters, digits, dashes" />
               </div>
               <div style={{ flex: 1, minWidth: 160 }}>
                 <label htmlFor="p">plan</label>
@@ -162,7 +164,16 @@ export default function InstancesPage() {
                   ) : null}
                   {i.autoSuspended ? <span className="badge suspended" title="auto-suspended: balance empty">auto</span> : null}
                 </td>
-                <td className="mono">{i.ip}</td>
+                <td>
+                  {i.ip
+                    ? <span
+                        data-copy
+                        title={`${i.ip} — click to copy`}
+                        className="mono"
+                        onClick={() => void copyText(i.ip, toast.ok)}
+                      >{i.ip}</span>
+                    : <span className="copy">—</span>}
+                </td>
                 <td>{plans.find((p) => p.id === i.planId)?.name ?? i.planId}</td>
                 <td className="mono">{(i.rateHourlyCents / 100).toFixed(2)}/h</td>
                 <td>
@@ -178,7 +189,7 @@ export default function InstancesPage() {
                 </td>
               </tr>
             ))}
-            {insts.length === 0 && <tr><td colSpan={6} className="muted">no instances yet</td></tr>}
+            {insts.length === 0 && <tr><td colSpan={6} className="empty">no instances yet — create your first above</td></tr>}
           </tbody>
         </table>
       </div>

@@ -1,6 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ThinkingOrb } from 'thinking-orbs';
+import { copyText } from '@/app/ui/clipboard';
+import { relTime } from '@/app/ui/time';
 
 type Inst = {
   id: string; name: string; status: string; ip: string; mac: string;
@@ -71,8 +74,15 @@ export default function InstanceDetail() {
       <div className="card">
         <div className="row">
           <span className={`badge ${inst.status}`}>{inst.status}</span>
-          <span className="mono">{inst.ip}</span>
-          <span className="muted">{(inst.rateHourlyCents / 100).toFixed(2)}/h</span>
+          {inst.ip
+            ? <span
+                data-copy
+                title={`${inst.ip} — click to copy`}
+                className="mono"
+                onClick={() => void copyText(inst.ip, null)}
+              >{inst.ip}</span>
+            : null}
+          <span className="mono" style={{ color: 'var(--accent)' }}>{(inst.rateHourlyCents / 100).toFixed(2)}/h</span>
           {inst.bw && inst.bw.quotaGb > 0
             ? <span className="mono muted">bw {fmtGb(inst.bw.rxBytes + inst.bw.txBytes)}/{inst.bw.quotaGb}GB</span>
             : null}
@@ -89,10 +99,9 @@ export default function InstanceDetail() {
         {msg && <div className="muted" style={{ marginTop: 8 }}>{msg}</div>}
       </div>
 
-      <div className="row" style={{ margin: '18px 0 0' }}>
+      <div className="tabs">
         {(['term', 'vnc', 'info'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            style={tab === t ? { borderColor: 'var(--accent)' } : undefined}>
+          <button key={t} onClick={() => setTab(t)} className={tab === t ? 'active' : ''}>
             {t === 'term' ? 'terminal' : t === 'vnc' ? 'console (VNC)' : 'information'}
           </button>
         ))}
@@ -109,13 +118,20 @@ export default function InstanceDetail() {
           <div>
             <dl className="kv">
               <dt>root password</dt>
-              <dd className="mono">
-                {showPw
-                  ? <span>{inst.rootPassword ?? '(hidden)'}</span>
-                  : <button onClick={() => setShowPw(true)} style={{ padding: '2px 8px' }}>reveal</button>}
+              <dd className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {showPw ? (
+                  <>
+                    <span>{inst.rootPassword ?? '(hidden)'}</span>
+                    {inst.rootPassword
+                      ? <button onClick={() => void copyText(inst.rootPassword!, null)} style={{ padding: '2px 8px' }}>copy</button>
+                      : null}
+                  </>
+                ) : (
+                  <button onClick={() => setShowPw(true)} style={{ padding: '2px 8px' }}>reveal</button>
+                )}
               </dd>
               <dt>mac</dt><dd className="mono">{inst.mac}</dd>
-              <dt>created</dt><dd>{new Date(inst.createdAt).toLocaleString()}</dd>
+              <dt>created</dt><dd title={new Date(inst.createdAt).toLocaleString()}>{relTime(inst.createdAt)}</dd>
             </dl>
             <h3 style={{ marginTop: 18 }}>recent jobs</h3>
             <table>
@@ -129,7 +145,7 @@ export default function InstanceDetail() {
                     <td>{new Date(j.createdAt).toLocaleTimeString()}</td>
                   </tr>
                 ))}
-                {jobs.length === 0 && <tr><td colSpan={4} className="muted">none</td></tr>}
+                {jobs.length === 0 && <tr><td colSpan={4} className="empty">no jobs yet</td></tr>}
               </tbody>
             </table>
           </div>
@@ -213,13 +229,38 @@ function Terminal({ instanceId }: { instanceId: string }) {
   }, [instanceId, state]);
 
   useEffect(() => () => connRef.current?.dispose(), []);
+
+  // auto-connect once when the tab mounts — the terminal is the point of the page
+  const autoRef = useRef(false);
+  useEffect(() => {
+    if (autoRef.current) return;
+    autoRef.current = true;
+    void connect();
+  }, [connect]);
+
   return (
     <div>
       <div className="row" style={{ marginBottom: 6 }}>
-        <button onClick={() => void connect()} disabled={state === 'connecting' || state === 'open'}>connect</button>
+        <button
+          onClick={() => void connect()}
+          disabled={state === 'connecting' || state === 'open'}
+        >{state === 'connecting' ? 'connecting…' : 'connect'}</button>
         <span className="muted">{state}{err ? ` — ${err}` : ''}</span>
       </div>
-      <div ref={boxRef} className="termwrap" />
+      <div style={{ position: 'relative' }}>
+        <div ref={boxRef} className="termwrap" />
+        {state !== 'open' && (
+          <div className="termhint">
+            {state === 'connecting'
+              ? <span className="busybtn"><ThinkingOrb state="connecting" size={20} theme="dark" aria-label="connecting" />connecting…</span>
+              : state === 'error'
+                ? <span style={{ color: 'var(--danger)' }}>{err || 'error'}</span>
+                : state === 'closed'
+                  ? 'disconnected — click connect to reopen'
+                  : 'starting shell…'}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -233,6 +274,9 @@ function Console({ instanceId }: { instanceId: string }) {
   const [err, setErr] = useState('');
 
   useEffect(() => () => rfbRef.current?.disconnect(), []);
+
+  // auto-connect once — same posture as the terminal tab
+  useEffect(() => { void connect(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const connect = async () => {
     setState('connecting');
@@ -265,7 +309,20 @@ function Console({ instanceId }: { instanceId: string }) {
         <button onClick={() => { rfbRef.current?.disconnect(); rfbRef.current = null; }} disabled={state !== 'open'}>disconnect</button>
         <span className="muted">{state}{err ? ` — ${err}` : ''}</span>
       </div>
-      <div ref={boxRef} className="consolwrap" />
+      <div style={{ position: 'relative' }}>
+        <div ref={boxRef} className="consolwrap" />
+        {state !== 'open' && (
+          <div className="termhint">
+            {state === 'connecting'
+              ? <span className="busybtn"><ThinkingOrb state="connecting" size={20} theme="dark" aria-label="connecting" />connecting…</span>
+              : state === 'error'
+                ? <span style={{ color: 'var(--danger)' }}>{err || 'error'}</span>
+                : state === 'closed'
+                  ? 'disconnected — click connect to reopen'
+                  : 'starting console…'}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
