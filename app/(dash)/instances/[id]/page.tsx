@@ -164,7 +164,7 @@ function Terminal({ instanceId }: { instanceId: string }) {
         body: JSON.stringify({ type: 'term' }),
       })).json();
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${proto}//${location.host}/api/instances/${instanceId}/terminal?token=${tok.token}`);
+      const ws = new WebSocket(`${proto}://${location.host}/api/instances/${instanceId}/terminal?token=${tok.token}`);
 
       term = new Terminal({ cursorBlink: true, fontFamily: '"JetBrains Mono", monospace', fontSize: 13 });
       const fit = new FitAddon();
