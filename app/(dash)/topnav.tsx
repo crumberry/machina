@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Blobatar } from '@blobatar/react';
@@ -19,9 +20,9 @@ export function TopNav({ name, role }: { name: string; role: string }) {
       <div className="brand">machina</div>
       <nav>
         {links.map((l) => (
-          <a key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>
+          <Link key={l.href} href={l.href} className={pathname.startsWith(l.href) ? 'active' : ''}>
             {l.label}
-          </a>
+          </Link>
         ))}
       </nav>
       <div className="spacer" />

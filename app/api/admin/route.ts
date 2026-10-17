@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireAdmin } from '@/lib/api';
-import { json, err } from '@/lib/api';
+import { json, err, guardMutation } from '@/lib/api';
 import { rawDb, getDb } from '@/lib/db';
 import { users, plans, images, instances, audit } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
@@ -29,9 +29,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const g = await requireAdmin();
-  if (!g[0]) return g[1];
-  const admin = g[0];
+  const g = guardMutation(req);
+  if (g) return g;
+  const g2 = await requireAdmin();
+  if (!g2[0]) return g2[1];
+  const admin = g2[0];
   const body = (await req.json().catch(() => ({}))) as {
     op?: string; userId?: string; deltaCents?: number;
     name?: string; password?: string; role?: string;

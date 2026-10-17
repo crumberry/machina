@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { rawDb } from '@/lib/db';
-import { verifyPassword } from '@/lib/core/crypto';
+import { verifyPassword, rateLimit } from '@/lib/core/crypto';
 
 const authConfig = NextAuth({
   session: { strategy: 'jwt', maxAge: 12 * 3600 },
@@ -13,14 +13,16 @@ const authConfig = NextAuth({
         username: { label: 'Username', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
-      /** Username + password against the users table. Admin can always log
-       *  in; non-admin users need a balance greater than historical zero only
-       *  in appearance: we allow login regardless (balance enforcement is
-       *  provisioning-time). */
-      authorize(creds) {
+      /** Username + password against the users table. Per-name+IP attempt
+       *  throttling (in-memory, single process) blunts brute force; success
+       *  clears the bucket. */
+      authorize(creds, req) {
         const name = typeof creds?.username === 'string' ? creds.username.trim() : '';
         const pass = typeof creds?.password === 'string' ? creds.password : '';
         if (!name || !pass) return null;
+        const ip = (req && 'headers' in req ? new Headers((req as Request).headers) : new Headers())
+          .get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+        if (!rateLimit(`auth:${name}@${ip}`, 8, 5 * 60_000)) return null; // >8 tries / 5min == locked out
         const row = rawDb().prepare('select id, name, role, password_hash from users where name=?').get(name) as
           | { id: string; name: string; role: string; password_hash: string | null }
           | undefined;

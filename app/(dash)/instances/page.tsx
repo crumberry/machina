@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ThinkingOrb } from 'thinking-orbs';
 import { BorderBeam } from 'border-beam';
 import { useToast } from '@/app/ui/toast';
@@ -153,7 +154,7 @@ export default function InstancesPage() {
           <tbody>
             {insts.map((i) => (
               <tr key={i.id}>
-                <td><a href={`/instances/${i.id}`} style={{ color: 'var(--accent)' }}>{i.name}</a></td>
+                <td><Link href={`/instances/${i.id}`} style={{ color: 'var(--accent)' }}>{i.name}</Link></td>
                 <td>
                   <span className={`badge ${i.status}`}>{i.status}</span>
                   {i.activeJob ? (
@@ -178,7 +179,7 @@ export default function InstancesPage() {
                 <td className="mono">{(i.rateHourlyCents / 100).toFixed(2)}/h</td>
                 <td>
                   <div className="soundboard">
-                    <a href={`/instances/${i.id}`}>open</a>
+                    <Link href={`/instances/${i.id}`}>open</Link>
                     {i.status === 'stopped' || i.status === 'suspended'
                       ? <button disabled={busy} onClick={() => act(i.id, 'start')}>start</button> : null}
                     {i.status === 'running'

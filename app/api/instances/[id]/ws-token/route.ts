@@ -28,8 +28,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return err('instance is stopped; needs running state before terminal/console', 409);
   }
 
+  // Token is bound to the requester: user A's token never opens user B's relay.
   return json({
-    token: mintToken(id, typ, 120),
+    token: mintToken(id, typ, 120, user.id, user.role === 'admin'),
     expireSec: 120,
     note: 'single use per channel; refresh via POST',
   });

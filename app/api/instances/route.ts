@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { json, err } from '@/lib/api';
+import { json, err, guardMutation } from '@/lib/api';
 import { getDb, rawDb } from '@/lib/db';
 import { instances, plans, images, users } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { enqueue } from '@/lib/core/jobs';
 import { newInstanceId, now } from '@/lib/core/util';
-import { encrypt, newId, randToken, randPassword } from '@/lib/core/crypto';
+import { encrypt, newId, randToken, randPassword, rateLimit } from '@/lib/core/crypto';
 import { config } from '@/lib/config';
 import { macFromId, IpAllocator } from '@/lib/core/driver';
 import { logAudit } from '@/lib/services/audit';
@@ -30,6 +30,8 @@ export async function GET() {
 
 /** Provision: validate + reserve (row, ip, plan copy) then enqueue create. */
 export async function POST(req: NextRequest) {
+  const g = guardMutation(req);
+  if (g) return g;
   const user = await requireUser();
   if (!user) return err('unauthorized', 401);
   const body = (await req.json().catch(() => ({}))) as {
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
   };
   const name = (body.name ?? '').trim();
   if (!/^[a-z0-9-]{3,32}$/.test(name)) return err('name: 3-32 chars of a-z 0-9 -');
+  if (!rateLimit(`create:${user.id}`, 10, 10 * 60_000)) return err('too many creations; slow down', 429);
 
   const authUser = user;
   const [plan] = await getDb().select().from(plans).where(and(eq(plans.id, body.planId ?? ''), eq(plans.active, 1)));

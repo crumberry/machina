@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { json, err } from '@/lib/api';
+import { json, err, guardMutation } from '@/lib/api';
 import { getDb, rawDb } from '@/lib/db';
 import { instances } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   return json({
     ...inst,
     rootPassEnc: undefined,
-    vnc_pass: undefined,
+    vncPass: undefined, // drizzle key is camelCase; the leaked VNC password is NOT a feature
     rootPassword: inst.rootPassEnc ? decrypt(inst.rootPassEnc) : null, // owner/admin session only
     bw: bandState(inst.id, inst.bandwidthGb ?? 0),
     jobs,
@@ -38,6 +38,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
 /** lifecycle actions: start | stop | delete */
 export async function POST(req: NextRequest, ctx: Ctx) {
+  const g = guardMutation(req);
+  if (g) return g;
   const user = await requireUser();
   if (!user) return err('unauthorized', 401);
   const { id } = await ctx.params;

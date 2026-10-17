@@ -23,18 +23,16 @@ export async function runSeed(): Promise<void> {
     on conflict(id) do nothing`);
   for (const p of seedPlans) reg.run(p.id, p.name, p.vcpu, p.ram_mb, p.disk_gb, Math.round(p.hourly * 100), p.bwGb);
 
-  // admin user
+  // admin user — insert-only so credential changes survive restarts.
+  // Rotation path: set ADMIN_FORCE_RESET=1 in machina.env alongside ADMIN_PASSWORD once.
   const adminName = process.env.ADMIN_USER || 'admin';
   const adminPass = process.env.ADMIN_PASSWORD || '';
   if (adminPass) {
     const exists = db.prepare('select 1 from users where name=?').get(adminName);
-    if (!exists) {
+    if (!exists || process.env.ADMIN_FORCE_RESET === '1') {
       db.prepare(`insert or replace into users (id,name,role,password_hash,balance_cents,created_at)
         values (?,?,'admin',?,?,?)`).run(
         newId('usr_'), adminName, hashPassword(adminPass), config.limits.defaultBalanceCents, Date.now());
-    } else {
-      // admin password rotation only happens when a hash is missing entirely.
-      db.prepare(`update users set password_hash=? where name=?`).run(hashPassword(adminPass), adminName);
     }
   }
 

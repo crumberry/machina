@@ -38,6 +38,10 @@ import { setWaker } from '@/lib/core/jobs';
 let wss: WebSocketServer;
 
 async function main(): Promise<void> {
+  if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 24) {
+    console.error('[machina] refusing to boot: AUTH_SECRET missing or too short (need >=24 chars)');
+    process.exit(1);
+  }
   await ensureSetupSafe();
   ensureDbReady();
   await runSeed();
@@ -97,10 +101,16 @@ async function handleUpgrade(
   }
 
   const inst = rawDb().prepare(`select * from instances where id=?`).get(instId) as
-    | { status: string; ip: string; root_pass_enc: string; vnc_socket: string; domain_name: string }
+    | { status: string; ip: string; root_pass_enc: string; vnc_socket: string; domain_name: string; user_id: string }
     | undefined;
   if (!inst) {
     socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  // Token is user-bound (mintToken(uid)); admins may mint for any instance.
+  if (!payload.adm && payload.uid !== inst.user_id) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;
   }

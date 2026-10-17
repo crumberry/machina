@@ -1,5 +1,6 @@
+import { NextRequest } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { json, err, uuid } from '@/lib/api';
+import { json, err, uuid, guardMutation } from '@/lib/api';
 import { getDb, rawDb } from '@/lib/db';
 import { sshKeys } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -16,6 +17,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const g = guardMutation(req as NextRequest);
+  if (g) return g;
   const user = await requireUser();
   if (!user) return err('unauthorized', 401);
   const body = (await req.json().catch(() => ({}))) as { label?: string; pubKey?: string };
@@ -33,6 +36,8 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const g = guardMutation(req as NextRequest);
+  if (g) return g;
   const user = await requireUser();
   if (!user) return err('unauthorized', 401);
   const body = (await req.json().catch(() => ({}))) as { id?: string };

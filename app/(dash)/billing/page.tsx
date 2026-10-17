@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { relTime } from '@/app/ui/time';
+import { useToast } from '@/app/ui/toast';
 
 type Ledger = {
   id: string; deltaCents: number; reason: string; note: string | null;
@@ -9,9 +10,13 @@ type Ledger = {
 };
 
 export default function BillingPage() {
+  const toast = useToast();
   const [balance, setBalance] = useState<number | null>(null);
   const [ledger, setLedger] = useState<Ledger[]>([]);
   const [cap, setCap] = useState<{ running: number; max: number } | null>(null);
+  const [cur, setCur] = useState('');
+  const [nw, setNw] = useState('');
+  const [nwpwBus, setPwBus] = useState(false);
   const load = useCallback(async () => {
     const r = await fetch('/api/billing', { cache: 'no-store' });
     if (r.ok) {
@@ -22,6 +27,19 @@ export default function BillingPage() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  async function changePw(e: React.FormEvent) {
+    e.preventDefault();
+    setPwBus(true);
+    const r = await fetch('/api/auth/password', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ current: cur, next: nw }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { toast.ok('password changed — persists across restarts'); setCur(''); setNw(''); }
+    else toast.err(j.error ?? 'change failed');
+    setPwBus(false);
+  }
 
   return (
     <>
@@ -43,6 +61,23 @@ export default function BillingPage() {
             <div>{cap ? <span className="mono">{cap.running}/{cap.max}</span> : '…'} <span className="copy">running</span></div>
           </div>
         </div>
+      </div>
+      <div className="card">
+        <h3>change password</h3>
+        <div className="sub" style={{ margin: '-6px 0 12px' }}>persists across restarts; the seed never rewrites it unless ADMIN_FORCE_RESET=1</div>
+        <form onSubmit={changePw}>
+          <div className="row">
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label htmlFor="cp">current password</label>
+              <input id="cp" type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" />
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label htmlFor="np">new password (8-72)</label>
+              <input id="np" type="password" value={nw} onChange={(e) => setNw(e.target.value)} autoComplete="new-password" />
+            </div>
+            <button type="submit" disabled={nwpwBus || !cur || nw.length < 8}>update</button>
+          </div>
+        </form>
       </div>
       <div className="card">
         <h3>ledger (last 50)</h3>
