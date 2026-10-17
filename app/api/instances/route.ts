@@ -38,28 +38,34 @@ export async function POST(req: NextRequest) {
   const name = (body.name ?? '').trim();
   if (!/^[a-z0-9-]{3,32}$/.test(name)) return err('name: 3-32 chars of a-z 0-9 -');
 
+  const authUser = user;
   const [plan] = await getDb().select().from(plans).where(and(eq(plans.id, body.planId ?? ''), eq(plans.active, 1)));
   if (!plan) return err('plan invalid', 400);
-  const [image] = await getDb().select().from(images).where(eq(images.id, body.imageId ?? ''));
+  const [dbUser] = await getDb().select().from(users).where(eq(users.id, authUser.id));
+  if (!dbUser) return err('no user', 401);
+  // Image selection: respect admin assignment
+  let imageId = body.imageId ?? '';
+  if (!dbUser.imagePickable && dbUser.assignedImageId) {
+    imageId = dbUser.assignedImageId;
+  }
+  const [image] = await getDb().select().from(images).where(eq(images.id, imageId));
   if (!image || image.status !== 'ready') return err('image not ready', 400);
 
   const db = getDb();
   // budget guard: minimum 1 hour of runtime at plan rate
-  const [u] = await db.select().from(users).where(eq(users.id, user.id));
-  if (!u) return err('no user', 401);
-  if (u.balanceCents < plan.hourlyRateCents) return err('insufficient balance for 1h at plan rate', 402);
+  if (dbUser.balanceCents < plan.hourlyRateCents) return err('insufficient balance for 1h at plan rate', 402);
 
   // global running cap
   const rd = rawDb();
   const runningTotal = (rd.prepare(`select count(*) c from instances where status='running'`).get() as { c: number }).c;
   if (runningTotal >= config.limits.maxRunningTotal) return err('host at capacity; try later', 503);
-  if (user.role !== 'admin') {
-    const mine = (rd.prepare(`select count(*) c from instances where user_id=? and status='running'`).get(user.id) as { c: number }).c;
+  if (authUser.role !== 'admin') {
+    const mine = (rd.prepare(`select count(*) c from instances where user_id=? and status='running'`).get(authUser.id) as { c: number }).c;
     if (mine >= config.limits.maxRunningPerUser) return err(`running instance cap (${config.limits.maxRunningPerUser}) reached`, 402);
   }
 
   // unique (user_id, name)
-  const dupe = rd.prepare(`select 1 from instances where user_id=? and name=?`).get(user.id, name);
+  const dupe = rd.prepare(`select 1 from instances where user_id=? and name=?`).get(authUser.id, name);
   if (dupe) return err('name already used', 409);
 
   // ip allocation from the configured range
@@ -74,7 +80,7 @@ export async function POST(req: NextRequest) {
   await db.insert(instances).values({
     id,
     domainName: `${config.domainPrefix}${id.slice(3, 16)}`,
-    userId: user.id,
+    userId: authUser.id,
     planId: plan.id,
     imageId: image.id,
     name,
@@ -90,10 +96,10 @@ export async function POST(req: NextRequest) {
     createdAt: now(),
     updatedAt: now(),
   });
-  await logAudit({ actorId: user.id, actorName: user.name, action: 'instance.create',
+  await logAudit({ actorId: authUser.id, actorName: authUser.name, action: 'instance.create',
     target: id, detail: { name, planId: plan.id, imageId: image.id } });
 
-  const jobId = await enqueue({ type: 'instance.create', instanceId: id, userId: user.id,
+  const jobId = await enqueue({ type: 'instance.create', instanceId: id, userId: authUser.id,
     payload: { planSnapshot: { vcpu: plan.vcpu, ramMb: plan.ramMb, diskGb: plan.diskGb } } });
   return json({ id, jobId, ip, name, status: 'provisioning' }, 201);
 }

@@ -90,16 +90,18 @@ async function fetchFile(url: string, dest: string): Promise<void> {
 
 /** Parse a cloud-images SHA256SUMS style file for the base image name. */
 function shaFor(sums: string, version: string): string | null {
+  // Collect all matching .img hashes, prefer amd64.
+  const matches: { hash: string; name: string }[] = [];
   for (const line of sums.split('\n')) {
     const m = line.match(/([0-9a-f]{64})\s+\*?(.*\.img)$/);
     if (!m) continue;
     const name = m[2];
-    // Match the version and avoid *-lxd / *-disc1 / *-rootfs variants.
-    if (name.includes(version) && !name.includes('lxd') && !name.includes('rootfs')) {
-      return m[1];
-    }
+    if (!name.includes(version) || name.includes('lxd') || name.includes('rootfs')) continue;
+    matches.push({ hash: m[1], name });
   }
-  return null;
+  if (!matches.length) return null;
+  const amd = matches.find((x) => x.name.includes('amd64') && !x.name.includes('amd64v'));
+  return (amd ?? matches[0]).hash;
 }
 
 const syncState = new Map<string, boolean>();

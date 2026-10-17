@@ -156,6 +156,13 @@ export const migrations: { version: string; sql: string }[] = [
         where bandwidth_gb = 0;
     `,
   },
+  {
+    version: '20261017_0003',
+    sql: `
+      alter table users add column image_pickable integer not null default 1;
+      alter table users add column assigned_image_id text;
+    `,
+  },
 ];
 
 export function initDb(): void {

@@ -12,6 +12,7 @@ export async function runSeed(): Promise<void> {
   clearSeedOnce();
   // plans (insert-only: admin edits via setPlan must survive restarts)
   const seedPlans: Array<{ id: string; name: string; vcpu: number; ram_mb: number; disk_gb: number; hourly: number; bwGb: number }> = [
+    { id: 'nano',    name: 'Nano',    vcpu: 1, ram_mb: 512,   disk_gb: 5,  hourly: 0.15, bwGb: 50 },
     { id: 'micro',   name: 'Micro',   vcpu: 1, ram_mb: 1024,  disk_gb: 10, hourly: 0.30, bwGb: 100 },
     { id: 'small',   name: 'Small',   vcpu: 2, ram_mb: 2048,  disk_gb: 20, hourly: 0.60, bwGb: 250 },
     { id: 'medium',  name: 'Medium',  vcpu: 2, ram_mb: 4096,  disk_gb: 40, hourly: 1.20, bwGb: 500 },
@@ -45,9 +46,29 @@ export async function runSeed(): Promise<void> {
       sha256_url: 'https://cloud-images.ubuntu.com/releases/24.04/release/SHA256SUMS',
     },
     {
+      id: 'ubuntu-26.04', name: 'Ubuntu 26.04 LTS (Resolute)', distro: 'ubuntu', version: '26.04',
+      url: 'https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img',
+      sha256_url: 'https://cloud-images.ubuntu.com/releases/26.04/release/SHA256SUMS',
+    },
+    {
       id: 'debian-12', name: 'Debian 12 (Bookworm)', distro: 'debian', version: '12',
       url: 'https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2',
-      sha256_url: '', // no SHA256SUMS published; baseline-hash-on-download applies
+      sha256_url: '',
+    },
+    {
+      id: 'alpine-3.20', name: 'Alpine Linux 3.20', distro: 'alpine', version: '3.20',
+      url: 'https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/cloud/nocloud_alpine-3.20.0-x86_64-uefi-cloudinit-r0.qcow2',
+      sha256_url: '',
+    },
+    {
+      id: 'arch-latest', name: 'Arch Linux (latest)', distro: 'arch', version: 'latest',
+      url: 'https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2',
+      sha256_url: '',
+    },
+    {
+      id: 'rocky-9', name: 'Rocky Linux 9', distro: 'rocky', version: '9',
+      url: 'https://download.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2',
+      sha256_url: '',
     },
   ];
   const imgReg = db.prepare(`insert into images (id,name,distro,version,url,sha256,sha256_url,path,status,size_bytes,updated_at)

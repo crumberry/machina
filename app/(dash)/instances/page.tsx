@@ -20,6 +20,9 @@ export default function InstancesPage() {
   const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [imgPickable, setImgPickable] = useState(true);
+  const [assignedImage, setAssignedImage] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     const r = await fetch('/api/instances', { cache: 'no-store' });
     if (r.ok) {
@@ -32,6 +35,8 @@ export default function InstancesPage() {
       const j = await a.json();
       setPlans((o) => (o.length ? o : j.plans));
       setImgs(j.images);
+      setImgPickable(!!j.imagePickable);
+      setAssignedImage(j.assignedImageId ?? null);
       setPlanId((o) => o || (j.plans[0]?.id ?? ''));
       setImageId((o) => o || (j.images.find((x: Img) => x.status === 'ready')?.id ?? ''));
     }
@@ -100,13 +105,19 @@ export default function InstancesPage() {
             </div>
             <div style={{ flex: 1, minWidth: 160 }}>
               <label htmlFor="i">image</label>
-              <select id="i" value={imageId} onChange={(e) => setImageId(e.target.value)}>
-                {imgs.map((x) => (
-                  <option key={x.id} value={x.id} disabled={x.status !== 'ready'}>
-                    {x.name} ({x.status})
-                  </option>
-                ))}
-              </select>
+              {imgPickable ? (
+                <select id="i" value={imageId} onChange={(e) => setImageId(e.target.value)}>
+                  {imgs.map((x) => (
+                    <option key={x.id} value={x.id} disabled={x.status !== 'ready'}>
+                      {x.name} ({x.status})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="muted" style={{ padding: '6px 0' }}>
+                  assigned: {imgs.find((x) => x.id === assignedImage)?.name ?? assignedImage ?? 'none'}
+                </div>
+              )}
             </div>
             <div>
               <button className="primary" type="submit" disabled={busy || !name || !planId || !imageId}>create</button>

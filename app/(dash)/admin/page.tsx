@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-type User = { id: string; name: string; role: string; balanceCents: number; createdAt: number };
+type User = { id: string; name: string; role: string; balanceCents: number; createdAt: number; imagePickable: number; assignedImageId: string | null };
 type Plan = { id: string; name: string; vcpu: number; ramMb: number; diskGb: number; hourlyRateCents: number; monthlyCapMin: number; bandwidthGb: number };
 type Img = { id: string; name: string; status: string; failure: string | null; sha256: string; sizeBytes: number; updatedAt: number };
 type Aud = { id: string; ts: number; actorName: string | null; action: string; target: string | null; detail: string | null };
@@ -17,6 +17,13 @@ export default function AdminPage() {
   const [newPass, setNewPass] = useState('');
   const [topupUser, setTopupUser] = useState('');
   const [topupAmt, setTopupAmt] = useState('25');
+  const [imgPickUser, setImgPickUser] = useState('');
+  const [imgPickable, setImgPickable] = useState(true);
+  const [imgAssigned, setImgAssigned] = useState('');
+  const [instUser, setInstUser] = useState('');
+  const [instName, setInstName] = useState('');
+  const [instPlan, setInstPlan] = useState('');
+  const [instImage, setInstImage] = useState('');
 
   const load = useCallback(async () => {
     const r = await fetch('/api/admin', { cache: 'no-store' });
@@ -53,13 +60,16 @@ export default function AdminPage() {
           <button className="primary" onClick={() => post({ op: 'topup', userId: topupUser, deltaCents: Math.round(parseFloat(topupAmt) * 100) })}>top up $</button>
         </div>
         <table style={{ marginTop: 14 }}>
-          <thead><tr><th>name</th><th>role</th><th>balance</th><th>since</th></tr></thead>
+          <thead><tr><th>name</th><th>role</th><th>balance</th><th>OS mode</th><th>since</th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.name}</td>
                 <td>{u.role}</td>
                 <td className="mono">${(u.balanceCents / 100).toFixed(2)}</td>
+                <td className="muted" style={{ fontSize: 12 }}>
+                  {u.role === 'admin' ? '—' : (u.imagePickable ? 'pickable' : `assigned: ${u.assignedImageId ?? 'none'}`)}
+                </td>
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
               </tr>
             ))}
@@ -101,6 +111,59 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="card">
+        <h3>OS assignment per user</h3>
+        <div className="row">
+          <select value={imgPickUser} onChange={(e) => {
+            setImgPickUser(e.target.value);
+            const u = users.find((x) => x.id === e.target.value);
+            if (u) { setImgPickable(!!u.imagePickable); setImgAssigned(u.assignedImageId ?? ''); }
+          }} style={{ maxWidth: 190 }}>
+            <option value="">select user…</option>
+            {users.filter((u) => u.role === 'user').map((u) => (
+              <option key={u.id} value={u.id}>{u.name} {u.imagePickable ? '(pickable)' : '(assigned)'}</option>
+            ))}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={imgPickable} onChange={(e) => setImgPickable(e.target.checked)} />
+            user can pick OS
+          </label>
+          <select value={imgAssigned} onChange={(e) => setImgAssigned(e.target.value)} style={{ maxWidth: 220 }}>
+            <option value="">no assigned OS</option>
+            {imgs.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.status})</option>)}
+          </select>
+          <button className="primary" disabled={!imgPickUser} onClick={() => {
+            void post({ op: 'setUserImage', userId: imgPickUser, imagePickable: imgPickable, assignedImageId: imgAssigned || null });
+          }}>save</button>
+        </div>
+        <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          When "user can pick OS" is off and an OS is assigned, the user cannot choose — the assigned OS is used automatically.
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>assign a box to a user</h3>
+        <div className="row">
+          <select value={instUser} onChange={(e) => setInstUser(e.target.value)} style={{ maxWidth: 190 }}>
+            <option value="">select user…</option>
+            {users.filter((u) => u.role === 'user').map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <input style={{ width: 160 }} placeholder="instance name" value={instName} onChange={(e) => setInstName(e.target.value)} />
+          <select value={instPlan} onChange={(e) => setInstPlan(e.target.value)} style={{ maxWidth: 160 }}>
+            <option value="">plan…</option>
+            {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={instImage} onChange={(e) => setInstImage(e.target.value)} style={{ maxWidth: 220 }}>
+            <option value="">OS (optional)…</option>
+            {imgs.filter((i) => i.status === 'ready').map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+          </select>
+          <button className="primary" disabled={!instUser || !instName || !instPlan} onClick={() => {
+            void post({ op: 'createInstance', targetUserId: instUser, name: instName, planId: instPlan, imageId: instImage || undefined });
+            setInstName('');
+          }}>create</button>
+        </div>
       </div>
 
       <div className="card">

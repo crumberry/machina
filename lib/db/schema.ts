@@ -7,6 +7,9 @@ export const users = sqliteTable('users', {
   passwordHash: text('password_hash'),
   // Running balance in cents; only mutated by admin grants and hourly metering.
   balanceCents: integer('balance_cents').default(0).notNull(),
+  // OS assignment: imagePickable=1 means user can choose OS; 0 means admin assigns.
+  imagePickable: integer('image_pickable').default(1).notNull(),
+  assignedImageId: text('assigned_image_id'),
   createdAt: integer('created_at').notNull(),
 }, (t) => [unique('uniq_user_name').on(t.name)]);
 
