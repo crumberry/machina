@@ -23,6 +23,7 @@
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "recharts": "^3.10.1",
     "ssh2": "^1.16.0",
     "thinking-orbs": "^0.3.2",
     "ws": "^8.18.3",

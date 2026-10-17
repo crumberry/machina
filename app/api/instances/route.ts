@@ -9,6 +9,7 @@ import { newInstanceId, now } from '@/lib/core/util';
 import { encrypt, newId, randToken, randPassword, rateLimit } from '@/lib/core/crypto';
 import { config } from '@/lib/config';
 import { macFromId, IpAllocator } from '@/lib/core/driver';
+import { provisionInstance } from '@/lib/core/provision';
 import { logAudit } from '@/lib/services/audit';
 
 export async function GET() {
@@ -30,10 +31,15 @@ export async function GET() {
 
 /** Provision: validate + reserve (row, ip, plan copy) then enqueue create. */
 export async function POST(req: NextRequest) {
-  const g = guardMutation(req);
-  if (g) return g;
   const user = await requireUser();
   if (!user) return err('unauthorized', 401);
+  const originErr = guardMutation(req);
+  if (originErr) return originErr;
+  // Non-admin users must REQUEST an instance (admin approves). Direct create
+  // is admin-only to enforce the approval gate.
+  if (user.role !== 'admin') {
+    return err('request an instance via /api/requests (admin approval required)', 403);
+  }
   const body = (await req.json().catch(() => ({}))) as {
     name?: string; planId?: string; imageId?: string;
   };
@@ -41,70 +47,15 @@ export async function POST(req: NextRequest) {
   if (!/^[a-z0-9-]{3,32}$/.test(name)) return err('name: 3-32 chars of a-z 0-9 -');
   if (!rateLimit(`create:${user.id}`, 10, 10 * 60_000)) return err('too many creations; slow down', 429);
 
-  const authUser = user;
-  const [plan] = await getDb().select().from(plans).where(and(eq(plans.id, body.planId ?? ''), eq(plans.active, 1)));
-  if (!plan) return err('plan invalid', 400);
-  const [dbUser] = await getDb().select().from(users).where(eq(users.id, authUser.id));
-  if (!dbUser) return err('no user', 401);
-  // Image selection: respect admin assignment
-  let imageId = body.imageId ?? '';
-  if (!dbUser.imagePickable && dbUser.assignedImageId) {
-    imageId = dbUser.assignedImageId;
+  try {
+    const r = await provisionInstance({
+      userId: user.id, name, planId: body.planId ?? '', imageId: body.imageId,
+      actorName: user.name, actorRole: user.role,
+    });
+    return json({ id: r.id, ip: r.ip, name: r.name, status: 'provisioning' }, 201);
+  } catch (e) {
+    return err((e as Error).message || 'create failed', 400);
   }
-  const [image] = await getDb().select().from(images).where(eq(images.id, imageId));
-  if (!image || image.status !== 'ready') return err('image not ready', 400);
-
-  const db = getDb();
-  // budget guard: minimum 1 hour of runtime at plan rate
-  if (dbUser.balanceCents < plan.hourlyRateCents) return err('insufficient balance for 1h at plan rate', 402);
-
-  // global running cap
-  const rd = rawDb();
-  const runningTotal = (rd.prepare(`select count(*) c from instances where status='running'`).get() as { c: number }).c;
-  if (runningTotal >= config.limits.maxRunningTotal) return err('host at capacity; try later', 503);
-  if (authUser.role !== 'admin') {
-    const mine = (rd.prepare(`select count(*) c from instances where user_id=? and status='running'`).get(authUser.id) as { c: number }).c;
-    if (mine >= config.limits.maxRunningPerUser) return err(`running instance cap (${config.limits.maxRunningPerUser}) reached`, 402);
-  }
-
-  // unique (user_id, name)
-  const dupe = rd.prepare(`select 1 from instances where user_id=? and name=?`).get(authUser.id, name);
-  if (dupe) return err('name already used', 409);
-
-  // ip allocation from the configured range
-  const taken = (rd.prepare(`select ip from instances where ip is not null`).all() as { ip: string }[])
-    .map((r) => r.ip);
-  const ip = new IpAllocator(taken).next();
-  if (!ip) return err('no free IP in range', 503);
-
-  const id = newInstanceId();
-  const rootPassword = randPassword();
-  const vncPass = randToken(4).slice(0, 8).replace(/[^a-zA-Z0-9]/g, 'x'); // 8 chars hard cap (libvirt)
-  await db.insert(instances).values({
-    id,
-    domainName: `${config.domainPrefix}${id.slice(3, 16)}`,
-    userId: authUser.id,
-    planId: plan.id,
-    imageId: image.id,
-    name,
-    status: 'provisioning',
-    mac: macFromId(id),
-    ip,
-    vncSocket: `${config.storageDir}/vnc/${id}.vnc`,
-    vncPass,
-    rootPassEnc: encrypt(rootPassword),
-    rateHourlyCents: plan.hourlyRateCents,
-    monthlyCapMin: plan.monthlyCapMin,
-    bandwidthGb: plan.bandwidthGb ?? 0,
-    createdAt: now(),
-    updatedAt: now(),
-  });
-  await logAudit({ actorId: authUser.id, actorName: authUser.name, action: 'instance.create',
-    target: id, detail: { name, planId: plan.id, imageId: image.id } });
-
-  const jobId = await enqueue({ type: 'instance.create', instanceId: id, userId: authUser.id,
-    payload: { planSnapshot: { vcpu: plan.vcpu, ramMb: plan.ramMb, diskGb: plan.diskGb } } });
-  return json({ id, jobId, ip, name, status: 'provisioning' }, 201);
 }
 
 export const dynamic = 'force-dynamic';

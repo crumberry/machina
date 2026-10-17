@@ -9,6 +9,8 @@ type User = { id: string; name: string; role: string; balanceCents: number; crea
 type Plan = { id: string; name: string; vcpu: number; ramMb: number; diskGb: number; hourlyRateCents: number; monthlyCapMin: number; bandwidthGb: number };
 type Img = { id: string; name: string; status: string; failure: string | null; sha256: string; sizeBytes: number; updatedAt: number };
 type Aud = { id: string; ts: number; actorName: string | null; action: string; target: string | null; detail: string | null };
+type InstReq = { id: string; userId: string; name: string; planId: string; imageId: string | null; status: string; note: string | null; createdAt: number; reviewNote: string | null };
+type DelReq = { id: string; userId: string; status: string; requestedAt: number };
 
 export default function AdminPage() {
   const toast = useToast();
@@ -16,6 +18,8 @@ export default function AdminPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [imgs, setImgs] = useState<Img[]>([]);
   const [aud, setAud] = useState<Aud[]>([]);
+  const [reqs, setReqs] = useState<InstReq[]>([]);
+  const [delReqs, setDelReqs] = useState<DelReq[]>([]);
   const [newName, setNewName] = useState('');
   const [newPass, setNewPass] = useState('');
   const [topupUser, setTopupUser] = useState('');
@@ -35,6 +39,10 @@ export default function AdminPage() {
       setUsers(j.users); setPlans(j.plans); setImgs(j.images); setAud(j.audit);
       setTopupUser((u) => u || (j.users[0]?.id ?? ''));
     }
+    const rq = await fetch('/api/requests', { cache: 'no-store' });
+    if (rq.ok) setReqs(await rq.json());
+    const dq = await fetch('/api/deletion', { cache: 'no-store' });
+    if (dq.ok) setDelReqs(await dq.json());
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -180,6 +188,77 @@ export default function AdminPage() {
             setInstName('');
           }}>create</button>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>instance requests ({reqs.filter((r) => r.status === 'pending').length} pending)</h3>
+        <table>
+          <thead><tr><th>user</th><th>name</th><th>plan</th><th>status</th><th>note</th><th>actions</th></tr></thead>
+          <tbody>
+            {reqs.map((r) => (
+              <tr key={r.id}>
+                <td>{r.userId.slice(0, 8)}</td>
+                <td className="mono">{r.name}</td>
+                <td>{r.planId}</td>
+                <td>{r.status}</td>
+                <td className="muted" style={{ fontSize: 11 }}>{r.note ?? '—'}</td>
+                <td>
+                  {r.status === 'pending' && (
+                    <>
+                      <button onClick={async () => {
+                        const res = await fetch(`/api/requests/${r.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'approve' }) });
+                        const j = await res.json().catch(() => ({}));
+                        if (res.ok) toast.ok(`approved (${j.instanceId ?? ''})`); else toast.err(j.error ?? 'fail');
+                        void load();
+                      }} style={{ padding: '2px 8px', fontSize: 11 }}>approve</button>
+                      <button onClick={async () => {
+                        const res = await fetch(`/api/requests/${r.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'reject' }) });
+                        const j = await res.json().catch(() => ({}));
+                        if (res.ok) toast.ok('rejected'); else toast.err(j.error ?? 'fail');
+                        void load();
+                      }} style={{ padding: '2px 8px', fontSize: 11, marginLeft: 4 }}>reject</button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>approve/reject via the request id: use the buttons (wired to /api/requests/[id])</div>
+      </div>
+
+      <div className="card">
+        <h3>deletion requests ({delReqs.filter((r) => r.status === 'pending').length} pending)</h3>
+        <table>
+          <thead><tr><th>user</th><th>status</th><th>requested</th><th>actions</th></tr></thead>
+          <tbody>
+            {delReqs.map((r) => (
+              <tr key={r.id}>
+                <td className="mono">{r.userId.slice(0, 12)}</td>
+                <td>{r.status}</td>
+                <td>{new Date(r.requestedAt).toLocaleString()}</td>
+                <td>
+                  {r.status === 'pending' && (
+                    <>
+                      <button onClick={async () => {
+                        const res = await fetch(`/api/deletion/${r.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'fulfill' }) });
+                        const j = await res.json().catch(() => ({}));
+                        if (res.ok) toast.ok(`fulfilled (${j.destroyed ?? 0} VMs)`); else toast.err(j.error ?? 'fail');
+                        void load();
+                      }} style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger, #f87171)' }}>fulfill (delete)</button>
+                      <button onClick={async () => {
+                        const res = await fetch(`/api/deletion/${r.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'reject' }) });
+                        const j = await res.json().catch(() => ({}));
+                        if (res.ok) toast.ok('rejected'); else toast.err(j.error ?? 'fail');
+                        void load();
+                      }} style={{ padding: '2px 8px', fontSize: 11, marginLeft: 4 }}>reject</button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="card">

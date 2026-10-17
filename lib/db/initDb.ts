@@ -163,6 +163,37 @@ export const migrations: { version: string; sql: string }[] = [
       alter table users add column assigned_image_id text;
     `,
   },
+  {
+    version: '20261017_0004',
+    sql: `
+      create table if not exists instance_requests (
+        id text primary key,
+        user_id text not null,
+        name text not null,
+        plan_id text not null,
+        image_id text,
+        note text,
+        status text not null default 'pending',
+        result_instance_id text,
+        created_at integer not null,
+        reviewed_by text,
+        reviewed_at integer,
+        review_note text
+      );
+      create index if not exists instreq_user_idx on instance_requests(user_id);
+      create index if not exists instreq_status_idx on instance_requests(status);
+
+      create table if not exists deletion_requests (
+        id text primary key,
+        user_id text not null,
+        status text not null default 'pending',
+        requested_at integer not null,
+        fulfilled_at integer,
+        fulfilled_by text
+      );
+      create index if not exists delreq_user_idx on deletion_requests(user_id);
+    `,
+  },
 ];
 
 export function initDb(): void {

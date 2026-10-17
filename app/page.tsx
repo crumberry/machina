@@ -3,5 +3,5 @@ import { requireUser } from '@/lib/auth';
 
 export default async function Home() {
   const user = await requireUser();
-  redirect(user ? '/instances' : '/signin');
+  redirect(user ? '/home' : '/signin');
 }

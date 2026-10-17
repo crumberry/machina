@@ -1,0 +1,118 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useToast } from '@/app/ui/toast';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+
+type Inst = { id: string; name: string; status: string; planId: string; ip: string; createdAt: number; rateHourlyCents: number };
+type Plan = { id: string; name: string; vcpu: number; ramMb: number };
+type Sample = { ts: number; running: number; weight: number };
+
+export default function HomePage() {
+  const toast = useToast();
+  const [insts, setInsts] = useState<Inst[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [pendingReqs, setPendingReqs] = useState(0);
+  const [spark, setSpark] = useState<Record<string, Sample[]>>({});
+
+  const load = useCallback(async () => {
+    const r = await fetch('/api/instances', { cache: 'no-store' });
+    if (r.ok) {
+      const j: Inst[] = await r.json();
+      setInsts(j);
+      for (const i of j) {
+        fetch(`/api/instances/${i.id}/usage`, { cache: 'no-store' })
+          .then((x) => x.ok ? x.json() : [])
+          .then((s) => setSpark((p) => ({ ...p, [i.id]: s })))
+          .catch(() => {});
+      }
+    }
+    const b = await fetch('/api/billing', { cache: 'no-store' });
+    if (b.ok) {
+      const j = await b.json();
+      setBalance(j.balanceCents);
+    }
+    const rq = await fetch('/api/requests', { cache: 'no-store' });
+    if (rq.ok) {
+      const j = await rq.json();
+      setPendingReqs(j.filter((x: { status: string }) => x.status === 'pending').length);
+    }
+    const c = await fetch('/api/catalog', { cache: 'no-store' });
+    if (c.ok) {
+      const j = await c.json();
+      setPlans(j.plans);
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { const t = setInterval(() => void load(), 10000); return () => clearInterval(t); }, [load]);
+
+  const planById = (id: string) => plans.find((p) => p.id === id);
+  const running = insts.filter((i) => i.status === 'running').length;
+  const stopped = insts.filter((i) => i.status === 'stopped').length;
+
+  return (
+    <>
+      <h1>status</h1>
+      <div className="sub">your homelab at a glance</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div className="card" style={{ padding: 14 }}>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>balance</div>
+          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>${balance !== null ? (balance / 100).toFixed(2) : '—'}</div>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>running</div>
+          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{running}<span className="muted" style={{ fontSize: 12 }}> / {insts.length}</span></div>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>stopped</div>
+          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{stopped}</div>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>pending requests</div>
+          <div className="mono" style={{ fontSize: 22, marginTop: 4 }}>{pendingReqs}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>your VMs</h3>
+          <Link href="/instances" style={{ fontSize: 12, color: 'var(--accent)' }}>open grid →</Link>
+        </div>
+        {insts.length === 0 && <div className="muted">no VMs yet — request one from the instances page</div>}
+        {insts.map((i) => {
+          const p = planById(i.planId);
+          const samples = spark[i.id] ?? [];
+          const data = samples.map((s) => ({ v: s.running ? s.weight * 100 : 0 }));
+          return (
+            <Link key={i.id} href={`/instances/${i.id}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                <span className={`status-dot ${i.status === 'running' ? 'running' : i.status === 'stopped' ? 'stopped' : 'provisioning'}`} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500 }}>{i.name}</div>
+                  <div className="muted mono" style={{ fontSize: 11 }}>{i.ip} · {p?.name} · {p?.vcpu}v {p?.ramMb}MB</div>
+                </div>
+                <div style={{ width: 90, height: 28 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+                      <defs>
+                        <linearGradient id={`g-${i.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.45} />
+                          <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Area type="monotone" dataKey="v" stroke="var(--accent)" strokeWidth={1.5} fill={`url(#g-${i.id})`} isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <span className="muted mono" style={{ fontSize: 11, minWidth: 70, textAlign: 'right' }}>{i.status}</span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </>
+  );
+}
