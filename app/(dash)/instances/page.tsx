@@ -1,6 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ThinkingOrb } from 'thinking-orbs';
+import { BorderBeam } from 'border-beam';
+import { useToast } from '@/app/ui/toast';
+import { loadStart, loadEnd } from '@/app/ui/loadbar';
 
 type Inst = {
   id: string; name: string; status: string; imageId: string; planId: string;
@@ -11,13 +15,13 @@ type Plan = { id: string; name: string; vcpu: number; ramMb: number; diskGb: num
 type Img = { id: string; name: string; status: string };
 
 export default function InstancesPage() {
+  const toast = useToast();
   const [insts, setInsts] = useState<Inst[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [imgs, setImgs] = useState<Img[]>([]);
   const [name, setName] = useState('');
   const [planId, setPlanId] = useState('');
   const [imageId, setImageId] = useState('');
-  const [msg, setMsg] = useState<{ t: 'ok' | 'err'; m: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [imgPickable, setImgPickable] = useState(true);
@@ -51,31 +55,34 @@ export default function InstancesPage() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setMsg(null);
+    loadStart();
     const r = await fetch('/api/instances', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, planId, imageId }),
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMsg({ t: 'ok', m: `provisioning ${j.name} (${j.id.slice(0, 8)}…) — boots in ~60s` });
+      toast.ok(`provisioning ${j.name} (${j.id.slice(0, 8)}…) — boots in ~60s`);
       setName('');
       void load();
     } else {
-      setMsg({ t: 'err', m: j.error ?? 'failed' });
+      toast.err(j.error ?? 'create failed');
     }
+    loadEnd();
     setBusy(false);
   }
 
   async function act(id: string, action: string) {
     setBusy(true);
+    loadStart();
     const r = await fetch(`/api/instances/${id}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action }),
     });
     const j = await r.json().catch(() => ({}));
-    if (r.ok) setMsg({ t: 'ok', m: `${action} queued` });
-    else setMsg({ t: 'err', m: j.error ?? 'failed' });
+    if (r.ok) toast.info(`${action} queued — watch the status badge`);
+    else toast.err(j.error ?? `${action} failed`);
+    loadEnd();
     setBusy(false);
     void load();
   }
@@ -85,47 +92,55 @@ export default function InstancesPage() {
       <h1>instances</h1>
       <div className="sub">libvirt VMs on the host; billed hourly from your balance</div>
 
-      <div className="card">
-        <h3>new instance</h3>
-        <form onSubmit={create}>
-          <div className="row">
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <label htmlFor="n">name (lowercase, dash)</label>
-              <input id="n" value={name} onChange={(e) => setName(e.target.value)} placeholder="dev-box" />
-            </div>
-            <div style={{ flex: 1, minWidth: 160 }}>
-              <label htmlFor="p">plan</label>
-              <select id="p" value={planId} onChange={(e) => setPlanId(e.target.value)}>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}: {p.vcpu}cpu/{p.ramMb / 1024}GB/{p.diskGb}GB — {(p.hourlyRateCents / 100).toFixed(2)}/h
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: 160 }}>
-              <label htmlFor="i">image</label>
-              {imgPickable ? (
-                <select id="i" value={imageId} onChange={(e) => setImageId(e.target.value)}>
-                  {imgs.map((x) => (
-                    <option key={x.id} value={x.id} disabled={x.status !== 'ready'}>
-                      {x.name} ({x.status})
+      <BorderBeam size="line" colorVariant="ice" active={busy} strength={0.9} theme="dark">
+        <div className="card">
+          <h3>new instance</h3>
+          <form onSubmit={create}>
+            <div className="row">
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label htmlFor="n">name (lowercase, dash)</label>
+                <input id="n" value={name} onChange={(e) => setName(e.target.value)} placeholder="dev-box" />
+              </div>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="p">plan</label>
+                <select id="p" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}: {p.vcpu}cpu/{p.ramMb / 1024}GB/{p.diskGb}GB — {(p.hourlyRateCents / 100).toFixed(2)}/h
                     </option>
                   ))}
                 </select>
-              ) : (
-                <div className="muted" style={{ padding: '6px 0' }}>
-                  assigned: {imgs.find((x) => x.id === assignedImage)?.name ?? assignedImage ?? 'none'}
-                </div>
-              )}
+              </div>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="i">image</label>
+                {imgPickable ? (
+                  <select id="i" value={imageId} onChange={(e) => setImageId(e.target.value)}>
+                    {imgs.map((x) => (
+                      <option key={x.id} value={x.id} disabled={x.status !== 'ready'}>
+                        {x.name} ({x.status})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="muted" style={{ padding: '6px 0' }}>
+                    assigned: {imgs.find((x) => x.id === assignedImage)?.name ?? assignedImage ?? 'none'}
+                  </div>
+                )}
+              </div>
+              <div>
+                <button className="primary" type="submit" disabled={busy || !name || !planId || !imageId}>
+                  {busy ? (
+                    <span className="busybtn">
+                      <ThinkingOrb state="composing" size={20} theme="dark" aria-label="creating" />
+                      creating…
+                    </span>
+                  ) : 'create'}
+                </button>
+              </div>
             </div>
-            <div>
-              <button className="primary" type="submit" disabled={busy || !name || !planId || !imageId}>create</button>
-            </div>
-          </div>
-        </form>
-        {msg && <div className={msg.t === 'ok' ? 'okbox' : 'errbox'} style={{ marginTop: 12 }}>{msg.m}</div>}
-      </div>
+          </form>
+        </div>
+      </BorderBeam>
 
       <div className="card">
         <h3>mine</h3>
@@ -139,8 +154,13 @@ export default function InstancesPage() {
                 <td><a href={`/instances/${i.id}`} style={{ color: 'var(--accent)' }}>{i.name}</a></td>
                 <td>
                   <span className={`badge ${i.status}`}>{i.status}</span>
+                  {i.activeJob ? (
+                    <span className="badge queued">
+                      <ThinkingOrb state="working" size={20} theme="dark" aria-label="working" />
+                      {i.activeJob.type.replace('instance.', '')}…
+                    </span>
+                  ) : null}
                   {i.autoSuspended ? <span className="badge suspended" title="auto-suspended: balance empty">auto</span> : null}
-                  {i.activeJob ? <span className="badge queued">{i.activeJob.type.replace('instance.', '')}…</span> : null}
                 </td>
                 <td className="mono">{i.ip}</td>
                 <td>{plans.find((p) => p.id === i.planId)?.name ?? i.planId}</td>

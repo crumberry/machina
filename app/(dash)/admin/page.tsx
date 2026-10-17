@@ -1,6 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ThinkingOrb } from 'thinking-orbs';
+import { BorderBeam } from 'border-beam';
+import { useToast } from '@/app/ui/toast';
 
 type User = { id: string; name: string; role: string; balanceCents: number; createdAt: number; imagePickable: number; assignedImageId: string | null };
 type Plan = { id: string; name: string; vcpu: number; ramMb: number; diskGb: number; hourlyRateCents: number; monthlyCapMin: number; bandwidthGb: number };
@@ -8,11 +11,11 @@ type Img = { id: string; name: string; status: string; failure: string | null; s
 type Aud = { id: string; ts: number; actorName: string | null; action: string; target: string | null; detail: string | null };
 
 export default function AdminPage() {
+  const toast = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [imgs, setImgs] = useState<Img[]>([]);
   const [aud, setAud] = useState<Aud[]>([]);
-  const [msg, setMsg] = useState('');
   const [newName, setNewName] = useState('');
   const [newPass, setNewPass] = useState('');
   const [topupUser, setTopupUser] = useState('');
@@ -35,20 +38,21 @@ export default function AdminPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const post = async (body: object) => {
+  const post = async (body: object, label = 'op') => {
     const r = await fetch('/api/admin', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => ({}));
-    setMsg(r.ok ? 'done' : j.error ?? 'failed');
+    if (r.ok) toast.ok(`${label} done`);
+    else toast.err(j.error ?? `${label} failed`);
     void load();
   };
 
   return (
     <>
       <h1>admin</h1>
-      <div className="sub">{msg && <span className="muted">{msg} · </span>}users, credits, images, plans, audit trail</div>
+      <div className="sub">users, credits, images, plans, audit trail</div>
 
       <div className="card">
         <h3>credits</h3>
@@ -57,7 +61,7 @@ export default function AdminPage() {
             {users.map((u) => <option key={u.id} value={u.id}>{u.name} (${(u.balanceCents / 100).toFixed(2)})</option>)}
           </select>
           <input style={{ width: 110 }} className="mono" value={topupAmt} onChange={(e) => setTopupAmt(e.target.value)} />
-          <button className="primary" onClick={() => post({ op: 'topup', userId: topupUser, deltaCents: Math.round(parseFloat(topupAmt) * 100) })}>top up $</button>
+          <button className="primary" onClick={() => post({ op: 'topup', userId: topupUser, deltaCents: Math.round(parseFloat(topupAmt) * 100) }, 'top up')}>top up $</button>
         </div>
         <table style={{ marginTop: 14 }}>
           <thead><tr><th>name</th><th>role</th><th>balance</th><th>OS mode</th><th>since</th></tr></thead>
@@ -78,28 +82,40 @@ export default function AdminPage() {
         <div className="row" style={{ marginTop: 14 }}>
           <input style={{ width: 160 }} placeholder="username" value={newName} onChange={(e) => setNewName(e.target.value)} />
           <input style={{ width: 160 }} placeholder="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
-          <button onClick={() => post({ op: 'createUser', name: newName, password: newPass })}>create user</button>
+          <button onClick={() => post({ op: 'createUser', name: newName, password: newPass }, 'create user')}>create user</button>
         </div>
       </div>
 
-      <div className="card">
-        <h3>images</h3>
-        <table>
-          <thead><tr><th>id</th><th>status</th><th>size</th><th>sha</th><th>updated</th><th /></tr></thead>
-          <tbody>
-            {imgs.map((i) => (
-              <tr key={i.id}>
-                <td>{i.name}</td>
-                <td><span className={`badge ${i.status}`}>{i.status}</span>{i.failure ? <div className="copy">{i.failure}</div> : null}</td>
-                <td className="mono">{(i.sizeBytes / 1024 / 1024).toFixed(0)}MB</td>
-                <td className="mono">{i.sha256 ? `${i.sha256.slice(0, 12)}…` : '—'}</td>
-                <td>{i.updatedAt ? new Date(i.updatedAt).toLocaleString() : '—'}</td>
-                <td><button onClick={() => post({ op: 'syncImage', imageId: i.id })}>sync</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <BorderBeam size="line" colorVariant="ice" active={imgs.some((i) => i.status === 'downloading')} strength={0.9} theme="dark">
+        <div className="card">
+          <h3>images</h3>
+          <table>
+            <thead><tr><th>id</th><th>status</th><th>size</th><th>sha</th><th>updated</th><th /></tr></thead>
+            <tbody>
+              {imgs.map((i) => (
+                <tr key={i.id}>
+                  <td>{i.name}</td>
+                  <td>
+                    <span className={`badge ${i.status}`}>
+                      {i.status === 'downloading' ? (
+                        <>
+                          <ThinkingOrb state="working" size={20} theme="dark" aria-label="downloading" />
+                        </>
+                      ) : null}
+                      {i.status}
+                    </span>
+                    {i.failure ? <div className="copy">{i.failure}</div> : null}
+                  </td>
+                  <td className="mono">{(i.sizeBytes / 1024 / 1024).toFixed(0)}MB</td>
+                  <td className="mono">{i.sha256 ? `${i.sha256.slice(0, 12)}…` : '—'}</td>
+                  <td>{i.updatedAt ? new Date(i.updatedAt).toLocaleString() : '—'}</td>
+                  <td><button onClick={() => post({ op: 'syncImage', imageId: i.id }, `sync ${i.name}`)}>sync</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </BorderBeam>
 
       <div className="card">
         <h3>plans</h3>
@@ -135,7 +151,7 @@ export default function AdminPage() {
             {imgs.map((i) => <option key={i.id} value={i.id}>{i.name} ({i.status})</option>)}
           </select>
           <button className="primary" disabled={!imgPickUser} onClick={() => {
-            void post({ op: 'setUserImage', userId: imgPickUser, imagePickable: imgPickable, assignedImageId: imgAssigned || null });
+            void post({ op: 'setUserImage', userId: imgPickUser, imagePickable: imgPickable, assignedImageId: imgAssigned || null }, 'OS assignment');
           }}>save</button>
         </div>
         <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
@@ -160,7 +176,7 @@ export default function AdminPage() {
             {imgs.filter((i) => i.status === 'ready').map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
           <button className="primary" disabled={!instUser || !instName || !instPlan} onClick={() => {
-            void post({ op: 'createInstance', targetUserId: instUser, name: instName, planId: instPlan, imageId: instImage || undefined });
+            void post({ op: 'createInstance', targetUserId: instUser, name: instName, planId: instPlan, imageId: instImage || undefined }, 'box assigned');
             setInstName('');
           }}>create</button>
         </div>
@@ -187,7 +203,7 @@ export default function AdminPage() {
   );
 }
 
-function PlanRow({ plan: p, post }: { plan: Plan; post: (b: object) => Promise<void> }) {
+function PlanRow({ plan: p, post }: { plan: Plan; post: (b: object, label?: string) => Promise<void> }) {
   const [bw, setBw] = useState(String(p.bandwidthGb ?? 0));
   useEffect(() => { setBw(String(p.bandwidthGb ?? 0)); }, [p.bandwidthGb]);
   return (
@@ -201,7 +217,7 @@ function PlanRow({ plan: p, post }: { plan: Plan; post: (b: object) => Promise<v
       <td>
         <button onClick={() => {
           const v = parseFloat(bw);
-          if (Number.isFinite(v) && v >= 0) void post({ op: 'setPlan', planId: p.id, bandwidthGb: v });
+          if (Number.isFinite(v) && v >= 0) void post({ op: 'setPlan', planId: p.id, bandwidthGb: v }, `plan ${p.name} quota`);
         }}>save</button>
       </td>
     </tr>

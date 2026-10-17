@@ -2,6 +2,8 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import { Blobatar } from '@blobatar/react';
+import 'blobatar/motion.css';
 
 export function TopNav({ name, role }: { name: string; role: string }) {
   const pathname = usePathname();
@@ -23,7 +25,10 @@ export function TopNav({ name, role }: { name: string; role: string }) {
         ))}
       </nav>
       <div className="spacer" />
-      <span className="muted">{name}</span>
+      <span className="navuser" title={name}>
+        <Blobatar name={name} size={26} animate="hover" />
+        <span className="muted">{name}</span>
+      </span>
       <button
         onClick={() => signOut({ callbackUrl: '/signin' }).then(() => router.push('/signin'))}
         style={{ padding: '4px 10px', fontSize: 13 }}

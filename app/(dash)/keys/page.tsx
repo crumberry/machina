@@ -1,14 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ThinkingOrb } from 'thinking-orbs';
+import { useToast } from '@/app/ui/toast';
 
 type Key = { id: string; label: string; pubKey: string; createdAt: number };
 
 export default function KeysPage() {
+  const toast = useToast();
   const [keys, setKeys] = useState<Key[]>([]);
   const [label, setLabel] = useState('');
   const [pubKey, setPubKey] = useState('');
-  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const r = await fetch('/api/keys', { cache: 'no-store' });
@@ -18,20 +21,24 @@ export default function KeysPage() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
+    setBusy(true);
     const r = await fetch('/api/keys', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ label, pubKey }),
     });
     const j = await r.json().catch(() => ({}));
-    setMsg(r.ok ? 'key added' : j.error ?? 'failed');
-    if (r.ok) { setLabel(''); setPubKey(''); void load(); }
+    if (r.ok) { toast.ok('key added'); setLabel(''); setPubKey(''); void load(); }
+    else toast.err(j.error ?? 'failed');
+    setBusy(false);
   }
 
   async function del(id: string) {
-    await fetch('/api/keys', {
+    const r = await fetch('/api/keys', {
       method: 'DELETE', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id }),
     });
+    if (r.ok) toast.ok('key removed');
+    else toast.err('remove failed');
     void load();
   }
 
@@ -52,10 +59,16 @@ export default function KeysPage() {
               <label htmlFor="k">public key</label>
               <input id="k" value={pubKey} onChange={(e) => setPubKey(e.target.value)} placeholder="ssh-ed25519 AAAA… me@host" className="mono" />
             </div>
-            <button className="primary" type="submit" disabled={!pubKey}>add</button>
+            <button className="primary" type="submit" disabled={busy || !pubKey}>
+              {busy ? (
+                <span className="busybtn">
+                  <ThinkingOrb state="composing" size={20} theme="dark" aria-label="adding" />
+                  adding…
+                </span>
+              ) : 'add'}
+            </button>
           </div>
         </form>
-        {msg && <div className="muted" style={{ marginTop: 10 }}>{msg}</div>}
       </div>
 
       <div className="card">
