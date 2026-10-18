@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/app/ui/toast';
+import { StatusCue } from '@/app/ui/status';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 type Inst = { id: string; name: string; status: string; planId: string; ip: string; createdAt: number; rateHourlyCents: number };
@@ -76,7 +77,7 @@ export default function HomePage() {
           const data = samples.map((s) => ({ v: s.running ? s.weight * 100 : 0 }));
           return (
             <Link key={i.id} href={`/instances/${i.id}`} className="vmrow" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <span className={`status-dot ${i.status === 'running' ? 'running' : i.status === 'stopped' ? 'stopped' : 'provisioning'}`} />
+                <StatusCue status={i.status} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500 }}>{i.name}</div>
                   <div className="muted mono" style={{ fontSize: 11 }}>{i.ip} · {p?.name} · {p?.vcpu}v {p?.ramMb}MB</div>

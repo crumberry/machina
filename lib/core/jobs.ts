@@ -43,6 +43,11 @@ export async function enqueue(input: {
 }
 
 /** Atomically claim one runnable job. */
+/**
+ * Claim the next runnable job. Image syncs are multi-minute downloads and
+ * used to starve provisioning behind them on this single-flight worker, so
+ * they sort last: instance work always drains first.
+ */
 export async function claimNext(): Promise<{
   id: string; type: JobType; instanceId: string | null; userId: string | null; payload: string;
 } | null> {
@@ -52,7 +57,8 @@ export async function claimNext(): Promise<{
       .prepare<unknown[], { id: string; type: string; instance_id: string | null; user_id: string | null; payload: string }>(
         `select id, type, instance_id, user_id, payload from jobs
          where status='queued' and run_after <= ?
-         order by created_at asc limit 1`,
+         order by case when type='image.sync' then 1 else 0 end, created_at asc
+         limit 1`,
       )
       .all(now());
     const j = rows[0];

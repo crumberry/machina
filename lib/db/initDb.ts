@@ -194,6 +194,16 @@ export const migrations: { version: string; sql: string }[] = [
       create index if not exists delreq_user_idx on deletion_requests(user_id);
     `,
   },
+  {
+    version: '20261017_0005',
+    sql: `
+      alter table instances add column heal_count integer not null default 0;
+      -- never let a dead provisioning row live forever; surfaced as an error
+      -- to the user with a readable reason instead of an endless spinner.
+      update instances set status='error' where status='provisioning'
+        and created_at < 1792280000000;
+    `,
+  },
 ];
 
 export function initDb(): void {

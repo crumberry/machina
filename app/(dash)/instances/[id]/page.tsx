@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { copyText } from '@/app/ui/clipboard';
 import { relTime } from '@/app/ui/time';
+import { StatusCue } from '@/app/ui/status';
 
 type Inst = {
   id: string; name: string; status: string; ip: string; mac: string;
   imageId: string; planId: string; rootPassword?: string;
   autoSuspended: number; rateHourlyCents: number; createdAt: number;
   bw?: { month: string; rxBytes: number; txBytes: number; quotaGb: number; throttled: boolean };
+  step?: string;
+  problem?: string | null;
+  healCount?: number;
 };
 
 function fmtGb(bytes: number): string {
@@ -68,12 +72,15 @@ export default function InstanceDetail() {
     <>
       <h1>{inst.name}</h1>
       <div className="sub">
-        instance <span className="mono">{inst.id}</span> · plan {inst.planId} · image {inst.imageId}
+        <span className="mono">{inst.id}</span> · {inst.planId} · {inst.imageId}
       </div>
 
       <div className="card">
-        <div className="row">
-          <span className={`badge ${inst.status}`}>{inst.status}</span>
+        <div className="row" style={{ gap: 14 }}>
+          <span className={`badge ${inst.status}`}>
+            {['provisioning', 'queued'].includes(inst.status) ? <StatusCue status={inst.status} /> : null}
+            {inst.status}
+          </span>
           {inst.ip
             ? <span
                 data-copy
@@ -82,12 +89,12 @@ export default function InstanceDetail() {
                 onClick={() => void copyText(inst.ip, null)}
               >{inst.ip}</span>
             : null}
-          <span className="mono" style={{ color: 'var(--accent)' }}>{(inst.rateHourlyCents / 100).toFixed(2)}/h</span>
+          <span className="mono" style={{ color: 'var(--accent)' }}>${(inst.rateHourlyCents / 100).toFixed(2)}/h</span>
           {inst.bw && inst.bw.quotaGb > 0
             ? <span className="mono muted">bw {fmtGb(inst.bw.rxBytes + inst.bw.txBytes)}/{inst.bw.quotaGb}GB</span>
             : null}
-          {inst.bw?.throttled ? <span className="badge suspended">throttled (bandwidth)</span> : null}
-          {inst.autoSuspended ? <span className="badge suspended">auto-suspended (balance)</span> : null}
+          {inst.bw?.throttled ? <span className="badge suspended">throttled</span> : null}
+          {inst.autoSuspended ? <span className="badge suspended">auto-suspended</span> : null}
           <div className="spacer" />
           {['running', 'suspended'].includes(inst.status)
             ? <button disabled={busy} onClick={() => act('stop')}>stop</button> : null}
@@ -97,6 +104,21 @@ export default function InstanceDetail() {
             ? <button className="danger" disabled={busy} onClick={() => act('delete')}>delete</button> : null}
         </div>
         {msg && <div className="muted" style={{ marginTop: 8 }}>{msg}</div>}
+        {inst.status === 'provisioning' && inst.step && (
+          <div className="busybtn" style={{ marginTop: 10, color: 'var(--text-2)', fontSize: 13 }}>
+            <ThinkingOrb state="working" size={20} theme="dark" aria-label="provisioning" />
+            {inst.step}…
+          </div>
+        )}
+        {inst.problem && (
+          <div className="errbox" style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>
+              {inst.problem}
+              {(inst.healCount ?? 0) > 0 && <span className="muted"> · auto-recovery attempt {inst.healCount}</span>}
+            </span>
+            <button onClick={() => act('retry')} disabled={busy}>try again</button>
+          </div>
+        )}
       </div>
 
       <div className="tabs">
@@ -142,7 +164,7 @@ export default function InstanceDetail() {
                     <td>{j.type}</td>
                     <td><span className={`badge ${j.status}`}>{j.status}</span></td>
                     <td className="copy">{j.error || '—'}</td>
-                    <td>{new Date(j.createdAt).toLocaleTimeString()}</td>
+                    <td title={new Date(j.createdAt).toLocaleString()}>{relTime(j.createdAt)}</td>
                   </tr>
                 ))}
                 {jobs.length === 0 && <tr><td colSpan={4} className="empty">no jobs yet</td></tr>}

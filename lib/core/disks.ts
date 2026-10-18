@@ -30,6 +30,11 @@ export async function createBackedDisk(
   const volName = diskVolFromId(instanceId);
   const volPath = `${sp.vms}/${volName}.qcow2`;
 
+  // qemu-img create refuses to touch an existing path, and a leftover file
+  // from an interrupted attempt then fails every retry with "Permission
+  // denied" (libvirt may have chowned it). Clear it first, idempotently.
+  await fs.rm(volPath, { force: true }).catch(() => {});
+
   // The overlay records the absolute base path + explicit backing format
   // (avoids probing, and survives pool-relative path assumptions).
   await pexec(config.qemuImgBin, [

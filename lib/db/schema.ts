@@ -69,6 +69,9 @@ export const instances = sqliteTable('instances', {
   vncPass: text('vnc_pass'),
   rootPassEnc: text('root_pass_enc'), // AES-256-GCM blob
   autoSuspended: integer('auto_suspended').default(0).notNull(),
+  /** bounded self-heal counter: retries we grant a stuck provisioning before
+   *  giving up and showing the user a real error (never an endless loop) */
+  healCount: integer('heal_count').default(0).notNull(),
   destroyAt: integer('destroy_at'), // expiry (rented-hours exhaustion)
   lastSettleAt: integer('last_settle_at').default(0).notNull(),
   createdAt: integer('created_at').notNull(),

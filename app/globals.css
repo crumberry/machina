@@ -46,7 +46,7 @@ button, input, select, a, tr {
 .topnav nav { display: flex; gap: 4px; }
 .topnav nav a { color: var(--text-2); font-size: 14px; padding: 4px 10px; border-radius: 6px; }
 .topnav nav a:hover { color: var(--text); background: var(--surface); }
-.topnav nav a.active { color: var(--text); background: var(--surface); box-shadow: inset 0 -2px 0 var(--accent); }
+.topnav nav a.active { color: var(--text); background: var(--surface-2); }
 .spacer { flex: 1; }
 
 h1 { font-size: 22px; font-weight: 600; margin: 28px 0 4px; }
@@ -239,6 +239,7 @@ td[onclick]:hover, [data-copy]:hover { color: var(--text); }
 
 /* status dots */
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.status-orb { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; margin: -5px 0; }
 .status-dot.running { background: var(--ok); box-shadow: 0 0 6px rgba(74, 222, 128, 0.45); }
 .status-dot.stopped, .status-dot.suspended { background: var(--warn); }
 .status-dot.provisioning { background: var(--accent); animation: status-pulse 1.2s ease-in-out infinite; }
@@ -258,6 +259,13 @@ td[onclick]:hover, [data-copy]:hover { color: var(--text); }
   color: var(--text); background: transparent; border: none; cursor: pointer; font-size: 13px; }
 .profilemenu a:hover, .profilemenu button:hover { background: var(--surface-2); }
 .profilemenu .sep { height: 1px; background: var(--line); margin: 6px 0; }
+
+/* long-form text (terms / privacy) */
+.prose { font-size: 13px; line-height: 1.7; color: var(--text-2); max-width: 68ch; }
+.prose h3 { color: var(--text); margin: 22px 0 6px; font-size: 14px; font-weight: 600; }
+.prose p { margin: 8px 0; }
+.prose p:first-child { margin-top: 0; }
+.prose a:hover { text-decoration: underline; }
 
 /* home vm list rows */
 .vmrow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }

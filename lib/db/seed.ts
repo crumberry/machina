@@ -2,6 +2,35 @@ import { getDb, rawDb } from '.';
 import { plans, images, users } from './schema';
 import { config } from '@/lib/config';
 import { hashPassword, newId, randToken } from '@/lib/core/crypto';
+import { macFromId } from '@/lib/core/driver';
+
+/**
+ * One-time repair for the macFromId collision bug: every instance id has the
+ * same length, so the old hash returned one MAC for all of them. Any instance
+ * that is NOT currently running gets a freshly derived unique MAC; running
+ * instances keep theirs so their live domain is not disturbed.
+ */
+function repairDuplicateMacs(): void {
+  const rd = rawDb();
+  const rows = rd.prepare(`select id, mac, status from instances`).all() as
+    { id: string; mac: string; status: string }[];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (r.status === 'running') { seen.add(r.mac); continue; }
+    const fresh = macFromId(r.id);
+    let mac = fresh;
+    let bump = 0;
+    while (seen.has(mac)) {
+      bump++;
+      mac = fresh.replace(/(..)$/, (m) => ((parseInt(m, 16) + bump) & 0xff).toString(16).padStart(2, '0'));
+    }
+    seen.add(mac);
+    if (mac !== r.mac) {
+      rd.prepare(`update instances set mac=? where id=?`).run(mac, r.id);
+      console.log(`[seed] repaired duplicate MAC for ${r.id}: ${r.mac} -> ${mac}`);
+    }
+  }
+}
 
 /**
  * One-time seed of baseline rows. Called at server boot even if migrations
@@ -10,6 +39,7 @@ import { hashPassword, newId, randToken } from '@/lib/core/crypto';
 export async function runSeed(): Promise<void> {
   const db = rawDb();
   clearSeedOnce();
+  repairDuplicateMacs();
   // plans (insert-only: admin edits via setPlan must survive restarts)
   const seedPlans: Array<{ id: string; name: string; vcpu: number; ram_mb: number; disk_gb: number; hourly: number; bwGb: number }> = [
     { id: 'nano',    name: 'Nano',    vcpu: 1, ram_mb: 512,   disk_gb: 5,  hourly: 0.15, bwGb: 50 },

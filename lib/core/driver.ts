@@ -27,9 +27,20 @@ async function geniso(outPath: string, dir: string): Promise<void> {
 // ---------------------------------------------------------------- networking
 
 export function macFromId(id: string): string {
-  // Deterministic, collision-safe for our scale: 52:54:00:XX:XX:XX from id hash
+  // Deterministic, collision-safe for our scale: 52:54:00:XX:XX:XX from an
+  // FNV-1a hash OF THE CHARACTER CODES.
+  //
+  // BUG THIS FIXES: the loop iterated `for (const c of id)` but never used `c`,
+  // so the hash only depended on id.length. Every instance id has the same
+  // length ('vm_' + 16 hex), so EVERY VM was handed the identical MAC. They
+  // collided on the bridge, only one could take an address, and the rest hung
+  // in systemd-networkd-wait-online until the SSH timeout killed provisioning.
+  // Math.imul keeps the multiply in 32-bit; a plain `*` loses precision above
+  // 2^53 and silently collides even sooner.
   let h = 0x811c9dc5;
-  for (const c of id) h = (h * 0x01000193) >>> 0;
+  for (let i = 0; i < id.length; i++) {
+    h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  }
   h = (h ^ (id.length * 31)) >>> 0;
   const b2 = (h & 0xff).toString(16).padStart(2, '0');
   const b1 = ((h >> 8) & 0xff).toString(16).padStart(2, '0');

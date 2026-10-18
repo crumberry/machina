@@ -16,6 +16,7 @@ export function TopNav({ name, role }: { name: string; role: string }) {
     { href: '/instances', label: 'instances' },
     { href: '/keys', label: 'ssh keys' },
     { href: '/billing', label: 'billing' },
+    { href: '/specs', label: 'specs' },
     ...(role === 'admin' ? [{ href: '/admin', label: 'admin' }] : []),
   ];
   return (
@@ -39,7 +40,11 @@ export function TopNav({ name, role }: { name: string; role: string }) {
           <div className="profilemenu" role="menu" onClick={() => setOpen(false)}>
             <Link href="/account" role="menuitem">account</Link>
             <Link href="/billing" role="menuitem">billing</Link>
+            <Link href="/specs" role="menuitem">specs</Link>
             {role === 'admin' && <Link href="/admin" role="menuitem">admin</Link>}
+            <div className="sep" />
+            <Link href="/terms" role="menuitem">terms</Link>
+            <Link href="/privacy" role="menuitem">privacy</Link>
             <div className="sep" />
             <button role="menuitem" onClick={() => signOut({ callbackUrl: '/signin' }).then(() => router.push('/signin'))}>
               sign out

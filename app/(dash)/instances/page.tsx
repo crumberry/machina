@@ -7,6 +7,7 @@ import { BorderBeam } from 'border-beam';
 import { useToast } from '@/app/ui/toast';
 import { copyText } from '@/app/ui/clipboard';
 import { loadStart, loadEnd } from '@/app/ui/loadbar';
+import { StatusCue } from '@/app/ui/status';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 type Inst = {
@@ -171,7 +172,7 @@ export default function InstancesPage() {
             <div key={i.id} className="card" style={{ padding: 14, margin: 0, position: 'relative', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <Link href={`/instances/${i.id}`} style={{ fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{i.name}</Link>
-                <span className={`status-dot ${i.status === 'running' ? 'running' : i.status === 'stopped' ? 'stopped' : 'provisioning'}`} />
+                <StatusCue status={i.status} />
               </div>
               <div className="muted mono" style={{ fontSize: 11, marginBottom: 8 }}>{i.ip} · {p?.name}</div>
               <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{p?.vcpu} vCPU · {p?.ramMb} MB RAM · {p?.diskGb} GB</div>

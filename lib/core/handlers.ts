@@ -94,6 +94,10 @@ async function create(job: JobCtx, log: (m: string) => void): Promise<void> {
     serialPath,
   });
   log('defining domain');
+  // a previous attempt may have left the domain defined (or even running);
+  // define is not idempotent, so clear it first
+  await destroyDomain(inst.domain_name).catch(() => {});
+  await undefineDomain(inst.domain_name).catch(() => {});
   await defineDomain(goXml);
   log('dhcp lease entry');
   await ensureIpLease(inst.mac, inst.ip);

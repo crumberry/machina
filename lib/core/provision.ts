@@ -50,6 +50,14 @@ export async function provisionInstance(a: ProvisionArgs): Promise<{ id: string;
   if (!ip) throw new Error('no free IP in range');
 
   const id = newInstanceId();
+
+  // MAC must be unique among live instances — a collision on the bridge makes
+  // every VM but one hang on networkd-wait-online, so refuse rather than
+  // provision a VM that can never get an address.
+  const mac = macFromId(id);
+  const macClash = rd.prepare(`select id from instances where mac=? and id<>?`).get(mac, id);
+  if (macClash) throw new Error('MAC address collision — please retry');
+
   const rootPassword = randPassword();
   const vncPass = randToken(4).slice(0, 8).replace(/[^a-zA-Z0-9]/g, 'x');
   await db.insert(instances).values({
@@ -60,7 +68,7 @@ export async function provisionInstance(a: ProvisionArgs): Promise<{ id: string;
     imageId: image.id,
     name: a.name,
     status: 'provisioning',
-    mac: macFromId(id),
+    mac,
     ip,
     vncSocket: `${config.storageDir}/vnc/${id}.vnc`,
     vncPass,
