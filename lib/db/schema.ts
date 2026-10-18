@@ -35,7 +35,10 @@ export const images = sqliteTable('images', {
   sha256: text('sha256').default('').notNull(),
   sha256Url: text('sha256_url').default('').notNull(),
   path: text('path').default('').notNull(),
-  status: text('status', { enum: ['missing', 'downloading', 'ready', 'failed'] })
+  // 'broken' = quarantined by auditImageBootability(): the file has no BIOS
+  // bootloader (UEFI-only build) so it can never boot on our SeaBIOS guests.
+  // Must stay in this union or every raw-SQL write of it is a type lie.
+  status: text('status', { enum: ['missing', 'downloading', 'ready', 'failed', 'broken'] })
     .default('missing').notNull(),
   failure: text('failure'),
   sizeBytes: integer('size_bytes').default(0).notNull(),

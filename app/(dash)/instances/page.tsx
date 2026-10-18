@@ -37,7 +37,24 @@ export default function InstancesPage() {
   const [reqName, setReqName] = useState('');
   const [reqPlan, setReqPlan] = useState('');
   const [reqNote, setReqNote] = useState('');
+  const [reqImage, setReqImage] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Only offer OS images that are actually usable. 'broken' is a quarantine by
+  // the bootability audit, 'missing'/'downloading'/'failed' are not bootable
+  // yet, and offering any of them means offering a VM that cannot start.
+  const readyImgs = imgs.filter((i) => i.status === 'ready');
+
+  // Preselect the OS so submitting a request is one click. An assigned image
+  // wins over the first alphabetical one, because that is what the account is
+  // configured for.
+  useEffect(() => {
+    if (reqImage || readyImgs.length === 0) return;
+    const preferred = assignedImage && readyImgs.some((i) => i.id === assignedImage)
+      ? assignedImage
+      : readyImgs[0].id;
+    setReqImage(preferred);
+  }, [readyImgs, assignedImage, reqImage]);
 
   const load = useCallback(async () => {
     const r = await fetch('/api/instances', { cache: 'no-store' });
@@ -97,10 +114,10 @@ export default function InstancesPage() {
     setBusy(true); loadStart();
     const r = await fetch('/api/requests', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: reqName, planId: reqPlan, note: reqNote }),
+      body: JSON.stringify({ name: reqName, planId: reqPlan, imageId: reqImage, note: reqNote }),
     });
     const j = await r.json().catch(() => ({}));
-    if (r.ok) { toast.ok('request submitted — admin will review'); setReqOpen(false); setReqName(''); setReqNote(''); }
+    if (r.ok) { toast.ok('request submitted — admin will review'); setReqOpen(false); setReqName(''); setReqNote(''); setReqImage(''); }
     else toast.err(j.error ?? 'request failed');
     loadEnd(); setBusy(false);
   }
@@ -159,6 +176,27 @@ export default function InstancesPage() {
                   <select value={reqPlan} onChange={(e) => setReqPlan(e.target.value)}>
                     {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.vcpu}v / {p.ramMb}MB</option>)}
                   </select>
+                </div>
+                {/* OS picker. Only rendered for accounts allowed to choose; the
+                    others are told what they got instead of being offered a
+                    choice the server would silently override anyway. Only
+                    'ready' images are offered — 'broken' means the bootability
+                    audit quarantined it (UEFI-only build, can never boot). */}
+                <div className="row" style={{ marginTop: 10 }}>
+                  {imgPickable ? (
+                    <>
+                      <span className="muted" style={{ fontSize: 12, minWidth: 28 }}>OS</span>
+                      <select value={reqImage} onChange={(e) => setReqImage(e.target.value)} disabled={readyImgs.length === 0}>
+                        {readyImgs.length === 0 && <option value="">no OS images ready yet</option>}
+                        {readyImgs.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                      </select>
+                    </>
+                  ) : (
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      OS: {assignedImage ?? 'assigned by your admin'}{' '}
+                      {readyImgs.length === 0 && '(no OS images ready on the host yet)'}
+                    </span>
+                  )}
                 </div>
                 <div style={{ marginTop: 10 }}>
                   <textarea placeholder="why you need it (optional)" value={reqNote} onChange={(e) => setReqNote(e.target.value)}
