@@ -19,7 +19,8 @@ const HEAL_RUNNING_MS = 12 * 60_000; // a create running longer than this is wed
  * max_attempts; each attempt's log is preserved. A poll tick plus every
  * enqueue() wakeup drive the loop. Also reaps stranded provisioning rows —
  * create jobs that died mid-flight leave instance status='provisioning'
- * behind otherwise.
+ * behind otherwise. It also quarantines images with no BIOS bootloader,
+ * which can never boot here.
  */
 
 let running = false;
@@ -39,6 +40,54 @@ export function startWorker(): void {
   const n = db().prepare(`update jobs set status='queued', run_after=? where status='running'`).run(now());
   if (n.changes > 0) console.log(`[worker] reclaimed ${n.changes} stranded running job(s)`);
   console.log(`[worker] poll ${config.workerPollMs}ms`);
+  void auditImageBootability();
+}
+
+/**
+ * A qcow2 with no BIOS bootloader (UEFI-only builds such as Alpine's
+ * `*-uefi-cloudinit-*`) cannot be booted by our SeaBIOS guests: the domain
+ * starts, prints nothing to serial, and dies on the SSH timeout. That failure
+ * is indistinguishable from a slow boot unless you diff the MBR, so check it
+ * once at boot and refuse to serve an image that cannot possibly boot.
+ */
+async function auditImageBootability(): Promise<void> {
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const os = await import('os');
+    const path = await import('path');
+    const fsp = await import('fs/promises');
+    const { storagePaths } = await import('@/lib/config');
+    const pexec = promisify(execFile);
+    const rd = rawDb();
+    const sp = storagePaths();
+    const rows = rd.prepare(`select id, path, status from images where status='ready'`).all() as
+      { id: string; path: string; status: string }[];
+    for (const img of rows) {
+      const file = img.path || `${sp.images}/${img.id}.qcow2`;
+      let bootable = false;
+      try {
+        // qemu-img dd writes binary to a real file reliably; /dev/stdout gives
+        // us nothing usable through execFile, so stage the MBR on disk.
+        const tmp = path.join(os.tmpdir(), `machina-mbr-${process.pid}-${img.id}.bin`);
+        await pexec('qemu-img', ['dd', `if=${file}`, `of=${tmp}`, 'bs=512', 'count=1'], { maxBuffer: 4096 });
+        const buf = await fsp.readFile(tmp);
+        await fsp.rm(tmp, { force: true }).catch(() => {});
+        bootable = buf.length >= 512
+          && buf[510] === 0x55 && buf[511] === 0xaa      // MBR signature
+          && !(buf[0] === 0 && buf[1] === 0 && buf[2] === 0); // GPT disk, no BIOS boot code
+      } catch {
+        continue; // unreadable: leave it alone rather than disable a good image
+      }
+      if (!bootable) {
+        rd.prepare(`update images set status='broken', failure=? where id=?`)
+          .run('image has no BIOS bootloader (UEFI-only build) — not bootable on this host', img.id);
+        console.log(`[worker] image ${img.id} marked broken: no BIOS bootloader`);
+      }
+    }
+  } catch (e) {
+    console.log(`[worker] image bootability audit skipped: ${(e as Error).message}`);
+  }
 }
 
 export function stopWorker(): void {
@@ -136,7 +185,16 @@ export function healStuckProvisioning(): number {
       and i.status = 'provisioning'
   `).all(t - HEAL_RUNNING_MS) as { job_id: string; instance_id: string; heal_count: number }[];
 
-  // 3. provisioning rows whose job vanished entirely
+  // 3. jobs that spent their attempt budget while still queued — nothing will
+  //    ever claim them, so their instance would hang in provisioning forever
+  const exhausted = rd.prepare(`
+    select j.id as job_id, j.instance_id, i.heal_count
+    from jobs j join instances i on i.id = j.instance_id
+    where j.status = 'queued' and j.attempts >= j.max_attempts
+      and i.status = 'provisioning'
+  `).all() as { job_id: string; instance_id: string; heal_count: number }[];
+
+  // 4. provisioning rows whose job vanished entirely
   const orphans = rd.prepare(`
     select i.id as instance_id, i.heal_count from instances i
     where i.status = 'provisioning' and i.created_at < ?
@@ -147,9 +205,24 @@ export function healStuckProvisioning(): number {
   let healed = 0;
   let gaveUp = 0;
 
-  for (const r of [...dead, ...wedged, ...orphans]) {
+  for (const r of [...dead, ...wedged, ...exhausted, ...orphans]) {
     if (seen.has(r.instance_id)) continue;
     seen.add(r.instance_id);
+
+    // Never heal an instance whose image can never boot (quarantined at boot by
+    // auditImageBootability). Retrying it is exactly the pointless loop we are
+    // trying to eliminate — say what is actually wrong and stop.
+    const img = rd.prepare(
+      `select i.image_id, im.status, im.failure from instances i left join images im on im.id = i.image_id where i.id=?`,
+    ).get(r.instance_id) as { image_id: string; status: string | null; failure: string | null } | undefined;
+    if (img && img.status && img.status !== 'ready') {
+      rd.prepare(`update instances set status='error', updated_at=? where id=? and status='provisioning'`).run(t, r.instance_id);
+      rd.prepare(`update jobs set status='failed', error=? where instance_id=? and status in ('queued','running')`)
+        .run(`the OS image "${img.image_id}" is unusable: ${img.failure ?? img.status}`, r.instance_id);
+      gaveUp++;
+      console.log(`[worker] ${r.instance_id} cannot be healed: image ${img.image_id} is ${img.status}`);
+      continue;
+    }
 
     if (r.heal_count >= HEAL_MAX) {
       rd.prepare(`update instances set status='error', updated_at=? where id=? and status='provisioning'`)

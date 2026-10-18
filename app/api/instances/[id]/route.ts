@@ -103,8 +103,8 @@ type LogLine = { t: number; m: string; kind: 'step' | 'ok' | 'err' | 'info' };
  *  the DB; this is what a person actually wants to read while waiting. */
 function logLines(jobId?: string): LogLine[] {
   if (!jobId) return [];
-  const row = rawDb().prepare(`select log, status, error from jobs where id=?`).get(jobId) as
-    | { log: string; status: string; error: string } | undefined;
+  const row = rawDb().prepare(`select log, status, error, finished_at, started_at, created_at from jobs where id=?`).get(jobId) as
+    | { log: string; status: string; error: string; finished_at: number | null; started_at: number | null; created_at: number } | undefined;
   if (!row) return [];
   const out: LogLine[] = [];
   const seen = new Set<number>();
@@ -118,8 +118,12 @@ function logLines(jobId?: string): LogLine[] {
     if (/^FAILED:/.test(text)) continue; // rendered separately as the error
     out.push({ t, m: friendlyStepLine(text), kind: stepKind(text) });
   }
-  if (row.status === 'done') out.push({ t: Date.now(), m: 'finished successfully', kind: 'ok' });
-  if (row.status === 'failed' && row.error) out.push({ t: Date.now(), m: row.error, kind: 'err' });
+  // The terminal line carries the job's REAL end time. Date.now() here was
+  // wrong: it stamped the failure with whenever the page was next opened,
+  // which made a 2-minute failure look like a 10-hour hang.
+  const endT = row.finished_at ?? row.started_at ?? row.created_at;
+  if (row.status === 'done') out.push({ t: endT, m: 'finished successfully', kind: 'ok' });
+  if (row.status === 'failed' && row.error) out.push({ t: endT, m: row.error, kind: 'err' });
   return out.slice(-40);
 }
 

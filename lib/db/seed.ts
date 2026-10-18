@@ -85,7 +85,11 @@ export async function runSeed(): Promise<void> {
     },
     {
       id: 'alpine-3.20', name: 'Alpine Linux 3.20', distro: 'alpine', version: '3.20',
-      url: 'https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/cloud/nocloud_alpine-3.20.0-x86_64-uefi-cloudinit-r0.qcow2',
+      // NOTE: must be the BIOS (non-uefi) build. Guests here are defined with
+      // SeaBIOS and no OVMF, and the uefi-cloudinit variant has an all-zero MBR
+      // (no bootloader), so it sits at "starting domain" forever and dies on the
+      // SSH timeout with a 0-byte serial log.
+      url: 'https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/cloud/nocloud_alpine-3.20.0-x86_64-bios-cloudinit-r0.qcow2',
       sha256_url: '',
     },
     {

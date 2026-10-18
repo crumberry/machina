@@ -7,6 +7,18 @@ export type LogLine = { t: number; m: string; kind: 'step' | 'ok' | 'err' | 'inf
 
 const hhmm = (t: number) => new Date(t).toTimeString().slice(0, 8);
 
+/** Human duration: 2m34s, 1h 04m, 12s. */
+function fmtSpan(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  if (m < 60) return `${m}m ${String(rs).padStart(2, '0')}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+}
+
 /**
  * Live log viewer. Polls while a job is in flight, stops when it settles, and
  * animates each new line in. Keeps the tail pinned unless the user has
@@ -82,6 +94,16 @@ export function LogStream({
             <span className="m" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
               <Orb state="weaving" size={20} label="working" />
               working…
+            </span>
+          </div>
+        )}
+        {/* duration is computed from the real timestamps, so a 2m34s failure
+            cannot masquerade as a 10-hour hang */}
+        {!live && items.length > 1 && (
+          <div className="logline" style={{ opacity: .6, marginTop: 6 }}>
+            <span className="t" />
+            <span className="m">
+              took {fmtSpan(items[items.length - 1].t - items[0].t)}
             </span>
           </div>
         )}

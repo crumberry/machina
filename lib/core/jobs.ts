@@ -55,8 +55,11 @@ export async function claimNext(): Promise<{
   for (let i = 0; i < 8; i++) {
     const rows = db
       .prepare<unknown[], { id: string; type: string; instance_id: string | null; user_id: string | null; payload: string }>(
+        // Never claim a job that has already spent its attempt budget: it can
+        // only fail again, and on a single-flight worker that starves every
+        // other job (an image sync queued behind a doomed create never ran).
         `select id, type, instance_id, user_id, payload from jobs
-         where status='queued' and run_after <= ?
+         where status='queued' and run_after <= ? and attempts < max_attempts
          order by case when type='image.sync' then 1 else 0 end, created_at asc
          limit 1`,
       )
