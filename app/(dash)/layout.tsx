@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
 import { ToastProvider } from '@/app/ui/toast';
 import { LoadBar } from '@/app/ui/loadbar';
+import { Shortcuts } from '@/app/ui/shortcuts';
+import { BackgroundWatcher } from '@/app/ui/watcher';
 import { TopNav } from './topnav';
 
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +18,8 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         </div>
       </div>
       <div className="layout">{children}</div>
+      <BackgroundWatcher />
+      <Shortcuts />
     </ToastProvider>
   );
 }

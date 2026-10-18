@@ -12,9 +12,13 @@ import { enqueue } from '@/lib/core/jobs';
 import { logAudit } from '@/lib/services/audit';
 import { syncState } from '@/lib/core/images';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const g = await requireAdmin();
   if (!g[0]) return g[1];
+  const limit = Math.min(200, Math.max(10, Number(req.nextUrl.searchParams.get('limit') ?? 50)));
+  const offset = Math.max(0, Number(req.nextUrl.searchParams.get('offset') ?? 0));
+  const rd0 = rawDb();
+  const auditTotal = (rd0.prepare(`select count(*) c from audit`).get() as { c: number }).c;
   return json({
     users: await getDb().select({
       id: users.id, name: users.name, role: users.role,
@@ -23,7 +27,8 @@ export async function GET() {
     }).from(users).orderBy(desc(users.createdAt)),
     plans: await getDb().select().from(plans),
     images: await getDb().select().from(images),
-    audit: await getDb().select().from(audit).orderBy(desc(audit.ts)).limit(50),
+    audit: await getDb().select().from(audit).orderBy(desc(audit.ts)).limit(limit).offset(offset),
+    auditTotal,
     syncing: [...syncState.keys()],
   });
 }

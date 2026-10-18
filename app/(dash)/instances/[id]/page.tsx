@@ -5,6 +5,8 @@ import { ThinkingOrb } from 'thinking-orbs';
 import { copyText } from '@/app/ui/clipboard';
 import { relTime } from '@/app/ui/time';
 import { StatusCue } from '@/app/ui/status';
+import { LogStream } from '@/app/ui/logstream';
+import { Ring, Orb, BarLoader } from '@/app/ui/loaders';
 
 type Inst = {
   id: string; name: string; status: string; ip: string; mac: string;
@@ -14,6 +16,7 @@ type Inst = {
   step?: string;
   problem?: string | null;
   healCount?: number;
+  logLines?: { t: number; m: string; kind: 'step' | 'ok' | 'err' | 'info' }[];
 };
 
 function fmtGb(bytes: number): string {
@@ -33,7 +36,7 @@ export default function InstanceDetail() {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [tab, setTab] = useState<'term' | 'vnc' | 'info'>('term');
+  const [tab, setTab] = useState<'term' | 'vnc' | 'info' | 'logs'>('term');
 
   const load = useCallback(async (id: string) => {
     const r = await fetch(`/api/instances/${id}`, { cache: 'no-store' });
@@ -106,25 +109,31 @@ export default function InstanceDetail() {
         {msg && <div className="muted" style={{ marginTop: 8 }}>{msg}</div>}
         {inst.status === 'provisioning' && inst.step && (
           <div className="busybtn" style={{ marginTop: 10, color: 'var(--text-2)', fontSize: 13 }}>
-            <ThinkingOrb state="working" size={20} theme="dark" aria-label="provisioning" />
+            <Orb state="weaving" size={20} label="provisioning" />
             {inst.step}…
           </div>
         )}
+        {inst.status === 'provisioning' && <div style={{ marginTop: 10 }}><BarLoader label="provisioning" /></div>}
         {inst.problem && (
-          <div className="errbox" style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>
-              {inst.problem}
-              {(inst.healCount ?? 0) > 0 && <span className="muted"> · auto-recovery attempt {inst.healCount}</span>}
+          <div className="errbox" style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <Orb state="solving" size={20} label="error" />
+              <span>
+                {inst.problem}
+                {(inst.healCount ?? 0) > 0 && <span className="muted"> · auto-recovery attempt {inst.healCount} of 3</span>}
+              </span>
             </span>
-            <button onClick={() => act('retry')} disabled={busy}>try again</button>
+            <button onClick={() => act('retry')} disabled={busy} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              {busy ? <Ring size={11} /> : null} try again
+            </button>
           </div>
         )}
       </div>
 
       <div className="tabs">
-        {(['term', 'vnc', 'info'] as const).map((t) => (
+        {(['term', 'vnc', 'info', 'logs'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={tab === t ? 'active' : ''}>
-            {t === 'term' ? 'terminal' : t === 'vnc' ? 'console (VNC)' : 'information'}
+            {t === 'term' ? 'terminal' : t === 'vnc' ? 'console (VNC)' : t === 'info' ? 'information' : 'activity'}
           </button>
         ))}
       </div>
@@ -136,6 +145,9 @@ export default function InstanceDetail() {
         {tab === 'vnc' && (inst.status === 'running'
           ? <Console instanceId={inst.id} />
           : <div className="muted">console available when running</div>)}
+        {tab === 'logs' && (
+          <LogStream lines={inst.logLines ?? []} live={inst.status === 'provisioning'} height={340} />
+        )}
         {tab === 'info' && (
           <div>
             <dl className="kv">

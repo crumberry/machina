@@ -17,6 +17,7 @@ export default function BillingPage() {
   const [cur, setCur] = useState('');
   const [nw, setNw] = useState('');
   const [nwpwBus, setPwBus] = useState(false);
+  const [running, setRunning] = useState<{ id: string; name: string; rateHourlyCents: number }[]>([]);
   const load = useCallback(async () => {
     const r = await fetch('/api/billing', { cache: 'no-store' });
     if (r.ok) {
@@ -27,6 +28,13 @@ export default function BillingPage() {
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    fetch('/api/instances', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setRunning(rows.filter((i: { status: string }) => i.status === 'running')))
+      .catch(() => {});
+  }, []);
 
   async function changePw(e: React.FormEvent) {
     e.preventDefault();
@@ -60,6 +68,35 @@ export default function BillingPage() {
             <div className="muted">host capacity</div>
             <div>{cap ? <span className="mono">{cap.running}/{cap.max}</span> : '…'} <span className="copy">running</span></div>
           </div>
+        </div>
+      </div>
+      <div className="card">
+        <h3>forecast</h3>
+        {(() => {
+          const burn = running.reduce((a, i) => a + (i.rateHourlyCents ?? 0), 0);
+          const bal = balance ?? 0;
+          const days = burn > 0 ? Math.floor(bal / burn / 24) : null;
+          return (
+            <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>hourly burn</div>
+                <div className="mono" style={{ fontSize: 20, marginTop: 4 }}>${(burn / 100).toFixed(2)}<span className="muted" style={{ fontSize: 12 }}>/h</span></div>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>monthly at this rate</div>
+                <div className="mono" style={{ fontSize: 20, marginTop: 4 }}>${((burn * 24 * 30) / 100).toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>balance lasts</div>
+                <div className="mono" style={{ fontSize: 20, marginTop: 4, color: days !== null && days < 3 ? 'var(--warn)' : undefined }}>
+                  {running.length === 0 ? '—' : days !== null ? (days > 365 ? '>1y' : `${days}d`) : '<1d'}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        <div className="muted" style={{ fontSize: 11, marginTop: 12 }}>
+          based on your {running.length} running VM{running.length === 1 ? '' : 's'} right now. VMs suspend automatically at zero.
         </div>
       </div>
       <div className="card">

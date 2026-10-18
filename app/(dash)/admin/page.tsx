@@ -20,6 +20,8 @@ export default function AdminPage() {
   const [aud, setAud] = useState<Aud[]>([]);
   const [reqs, setReqs] = useState<InstReq[]>([]);
   const [delReqs, setDelReqs] = useState<DelReq[]>([]);
+  const [auditOffset, setAuditOffset] = useState(0);
+  const [auditTotal, setAuditTotal] = useState(0);
   const [newName, setNewName] = useState('');
   const [newPass, setNewPass] = useState('');
   const [topupUser, setTopupUser] = useState('');
@@ -33,10 +35,11 @@ export default function AdminPage() {
   const [instImage, setInstImage] = useState('');
 
   const load = useCallback(async () => {
-    const r = await fetch('/api/admin', { cache: 'no-store' });
+    const r = await fetch(`/api/admin?limit=50&offset=${auditOffset}`, { cache: 'no-store' });
     if (r.ok) {
       const j = await r.json();
       setUsers(j.users); setPlans(j.plans); setImgs(j.images); setAud(j.audit);
+      setAuditTotal(j.auditTotal ?? j.audit.length);
       setTopupUser((u) => u || (j.users[0]?.id ?? ''));
     }
     const rq = await fetch('/api/requests', { cache: 'no-store' });
@@ -262,7 +265,7 @@ export default function AdminPage() {
       </div>
 
       <div className="card">
-        <h3>audit (last 50)</h3>
+        <h3>audit ({aud.length ? `${Math.min(auditOffset + 50, auditTotal)} of ${auditTotal}` : auditTotal})</h3>
         <table>
           <thead><tr><th>when</th><th>actor</th><th>action</th><th>target</th><th>detail</th></tr></thead>
           <tbody>
@@ -277,6 +280,11 @@ export default function AdminPage() {
             ))}
           </tbody>
         </table>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+          <button disabled={auditOffset === 0} onClick={() => setAuditOffset(Math.max(0, auditOffset - 50))}>newer</button>
+          <button disabled={auditOffset + 50 >= auditTotal} onClick={() => setAuditOffset(auditOffset + 50)}>older</button>
+          <span className="muted" style={{ fontSize: 11 }}>page {Math.floor(auditOffset / 50) + 1}</span>
+        </div>
       </div>
     </>
   );

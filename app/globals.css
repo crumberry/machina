@@ -242,8 +242,104 @@ td[onclick]:hover, [data-copy]:hover { color: var(--text); }
 .status-orb { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; margin: -5px 0; }
 .status-dot.running { background: var(--ok); box-shadow: 0 0 6px rgba(74, 222, 128, 0.45); }
 .status-dot.stopped, .status-dot.suspended { background: var(--warn); }
-.status-dot.provisioning { background: var(--accent); animation: status-pulse 1.2s ease-in-out infinite; }
-@keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.status-dot.error { background: var(--danger); box-shadow: 0 0 6px rgba(248, 113, 113, 0.4); }
+
+/* ------------------------------------------------------------ skeletons */
+.skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, #232327 40%, var(--surface-2) 80%);
+  background-size: 300% 100%;
+  animation: skel-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skel-sweep { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+.skelrow { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+
+/* --------------------------------------------------------- micro loaders */
+.ring {
+  display: inline-block; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--line); border-top-color: var(--accent);
+  animation: ring-spin .7s linear infinite;
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+.dots { display: inline-flex; gap: 3px; align-items: center; }
+.dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--accent); animation: dot-wave 1s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot-wave { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+.barloader { position: relative; height: 2px; width: 100%; background: var(--line); border-radius: 2px; overflow: hidden; }
+.barloader-fill {
+  position: absolute; inset: 0; width: 40%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+  animation: bar-slide 1.2s ease-in-out infinite;
+}
+@keyframes bar-slide { from { transform: translateX(-110%); } to { transform: translateX(360%); } }
+
+/* --------------------------------------------------------- empty states */
+.empty { padding: 34px 12px; text-align: center; color: var(--text-3); }
+.empty-orb { display: flex; justify-content: center; margin-bottom: 12px; opacity: .75; }
+.empty-text { font-size: 13px; }
+
+/* --------------------------------------------------------- log streaming */
+.logview {
+  background: #050505; border: 1px solid var(--line); border-radius: var(--radius);
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px;
+  padding: 12px 14px; max-height: 320px; overflow-y: auto; line-height: 1.75;
+}
+.logline { display: flex; gap: 10px; color: var(--text-2); animation: log-in .22s ease-out; }
+@keyframes log-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.logline .t { color: var(--text-3); flex: none; }
+.logline .m { min-width: 0; word-break: break-word; }
+.logline.ok .m { color: var(--ok); }
+.logline.err .m { color: var(--danger); }
+.logline.step .m { color: var(--accent); }
+
+/* --------------------------------------------------------- card polish */
+.card { position: relative; }
+.card-hover { transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.card-hover:hover { border-color: #2e2e34; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 0, 0, .28); }
+
+/* staged entrance for lists (cards, rows, log lines) */
+.stagger > * { animation: rise-in .26s ease-out backwards; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 35ms; }
+.stagger > *:nth-child(3) { animation-delay: 70ms; }
+.stagger > *:nth-child(4) { animation-delay: 105ms; }
+.stagger > *:nth-child(5) { animation-delay: 140ms; }
+.stagger > *:nth-child(6) { animation-delay: 175ms; }
+.stagger > *:nth-child(n+7) { animation-delay: 210ms; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* section headers with a hairline rule that draws in */
+.rule-title { display: flex; align-items: center; gap: 10px; margin: 26px 0 10px; font-size: 13px; color: var(--text-2); font-weight: 500; }
+.rule-title::after { content: ''; flex: 1; height: 1px; background: var(--line); animation: rule-in .4s ease-out; }
+@keyframes rule-in { from { transform: scaleX(0); transform-origin: left; } to { transform: scaleX(1); transform-origin: left; } }
+
+/* live pulse for "in flight" badges */
+.pulse-live { animation: live-pulse 2s ease-in-out infinite; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* keyboard shortcut hint */
+kbd {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 5px; line-height: 1.4;
+}
+.shortcutbar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--text-3); font-size: 11px; }
+
+/* ------------------------------------------------------------- responsive */
+@media (max-width: 720px) {
+  .layout { padding: 0 14px; }
+  .topnav { height: auto; min-height: 52px; flex-wrap: wrap; padding: 8px 0; gap: 10px; }
+  .topnav nav { order: 3; width: 100%; overflow-x: auto; }
+  .topnav .spacer { min-width: 8px; }
+  h1 { font-size: 19px; margin-top: 20px; }
+  .card { padding: 14px; margin: 12px 0; }
+  .kv { grid-template-columns: 1fr; gap: 2px 0; }
+  .kv dt { margin-top: 8px; }
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+  .toaststack { top: 56px; right: 10px; left: 10px; width: auto; }
+  .termwrap, .consolwrap { height: 320px; }
+  .tabs { overflow-x: auto; }
+}
 
 /* profile dropdown trigger */
 .profilebtn {

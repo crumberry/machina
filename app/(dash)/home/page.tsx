@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/app/ui/toast';
 import { StatusCue } from '@/app/ui/status';
+import { Skeleton, Empty } from '@/app/ui/loaders';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 type Inst = { id: string; name: string; status: string; planId: string; ip: string; createdAt: number; rateHourlyCents: number };
@@ -16,6 +17,7 @@ export default function HomePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [pendingReqs, setPendingReqs] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [spark, setSpark] = useState<Record<string, Sample[]>>({});
 
   const load = useCallback(async () => {
@@ -45,6 +47,7 @@ export default function HomePage() {
       const j = await c.json();
       setPlans(j.plans);
     }
+    setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { const t = setInterval(() => void load(), 10000); return () => clearInterval(t); }, [load]);
@@ -70,7 +73,13 @@ export default function HomePage() {
           <h3 style={{ margin: 0 }}>your VMs</h3>
           <Link href="/instances" style={{ fontSize: 12, color: 'var(--accent)' }}>open grid →</Link>
         </div>
-        {insts.length === 0 && <div className="muted">no VMs yet — request one from the instances page</div>}
+        {insts.length === 0 && !loading && (
+          <Empty
+            text="no VMs yet — request one from the instances page"
+            action={<Link href="/instances" style={{ fontSize: 12, color: 'var(--accent)' }}>go to instances →</Link>}
+          />
+        )}
+        {loading && insts.length === 0 && <div style={{ padding: '18px 0' }}><Skeleton h={10} w="60%" /><Skeleton h={10} w="40%" style={{ marginTop: 10 }} /></div>}
         {insts.map((i) => {
           const p = planById(i.planId);
           const samples = spark[i.id] ?? [];

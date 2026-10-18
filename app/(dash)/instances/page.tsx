@@ -8,6 +8,7 @@ import { useToast } from '@/app/ui/toast';
 import { copyText } from '@/app/ui/clipboard';
 import { loadStart, loadEnd } from '@/app/ui/loadbar';
 import { StatusCue } from '@/app/ui/status';
+import { Skeleton, Empty, Ring } from '@/app/ui/loaders';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 type Inst = {
@@ -36,6 +37,7 @@ export default function InstancesPage() {
   const [reqName, setReqName] = useState('');
   const [reqPlan, setReqPlan] = useState('');
   const [reqNote, setReqNote] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     const r = await fetch('/api/instances', { cache: 'no-store' });
@@ -65,6 +67,7 @@ export default function InstancesPage() {
       const j = await s.json();
       setRole(j?.user?.role ?? 'user');
     }
+    setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { const t = setInterval(() => void load(), 5000); return () => clearInterval(t); }, [load]);
@@ -163,16 +166,32 @@ export default function InstancesPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }} className="stagger">
+        {loading && insts.length === 0 && Array.from({ length: 3 }).map((_, n) => (
+          <div key={n} className="card" style={{ padding: 14, margin: 0 }}>
+            <Skeleton w="50%" h={14} style={{ marginBottom: 10 }} />
+            <Skeleton w="70%" h={9} style={{ marginBottom: 14 }} />
+            <Skeleton h={46} r={8} />
+          </div>
+        ))}
+        {!loading && insts.length === 0 && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Empty
+              text={isAdmin ? 'no VMs yet — create one above' : 'no VMs yet — request one and an admin will approve it'}
+              action={!isAdmin && <button className="primary" onClick={() => setReqOpen(true)}>request instance</button>}
+            />
+          </div>
+        )}
         {insts.map((i) => {
           const p = planById(i.planId);
           const samples = spark[i.id] ?? [];
           const data = samples.map((s) => ({ v: s.running ? Math.max(1, s.weight * 100) : 0 }));
+          const live = i.activeJob && (i.activeJob.status === 'running' || i.activeJob.status === 'queued');
           return (
-            <div key={i.id} className="card" style={{ padding: 14, margin: 0, position: 'relative', overflow: 'hidden' }}>
+            <div key={i.id} className="card card-hover" style={{ padding: 14, margin: 0, position: 'relative', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <Link href={`/instances/${i.id}`} style={{ fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{i.name}</Link>
-                <StatusCue status={i.status} />
+                <StatusCue status={i.status} jobType={live ? i.activeJob!.type : undefined} />
               </div>
               <div className="muted mono" style={{ fontSize: 11, marginBottom: 8 }}>{i.ip} · {p?.name}</div>
               <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{p?.vcpu} vCPU · {p?.ramMb} MB RAM · {p?.diskGb} GB</div>
@@ -189,16 +208,21 @@ export default function InstancesPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Link href={`/instances/${i.id}`} className="primary" style={{ padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}>open</Link>
                 {i.status === 'running' && <button onClick={() => act(i.id, 'stop')} disabled={busy} style={{ padding: '4px 10px', fontSize: 12 }}>stop</button>}
                 {i.status === 'stopped' && <button onClick={() => act(i.id, 'start')} disabled={busy} style={{ padding: '4px 10px', fontSize: 12 }}>start</button>}
-                {isAdmin && <button onClick={() => { if (confirm(`delete ${i.name}?`)) act(i.id, 'delete'); }} disabled={busy} style={{ padding: '4px 10px', fontSize: 12, color: 'var(--danger, #f87171)' }}>delete</button>}
+                {i.status === 'error' && (
+                  <button onClick={() => act(i.id, 'retry')} disabled={busy} style={{ padding: '4px 10px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    <Ring size={10} /> retry
+                  </button>
+                )}
+                {live && <span className="muted pulse-live" style={{ fontSize: 11, marginLeft: 2 }}>{i.activeJob!.type.replace('instance.', '')}…</span>}
+                {isAdmin && <button onClick={() => { if (confirm(`delete ${i.name}?`)) act(i.id, 'delete'); }} disabled={busy} style={{ padding: '4px 10px', fontSize: 12, color: 'var(--danger, #f87171)', marginLeft: 'auto' }}>delete</button>}
               </div>
             </div>
           );
         })}
-        {insts.length === 0 && <div className="muted">no VMs yet</div>}
       </div>
     </>
   );

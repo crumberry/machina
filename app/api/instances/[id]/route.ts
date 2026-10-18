@@ -90,8 +90,49 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     step,
     problem: inst.status === 'error' || lastFailed ? (lastFailed?.error || 'provisioning failed') : null,
     healCount: inst.healCount ?? 0,
+    // structured lines for the live log viewer: one entry per step already
+    // taken, newest last, each with a readable message
+    logLines: logLines(active?.id ?? lastFailed?.id ?? jobs[0]?.id),
     jobs,
   });
+}
+
+type LogLine = { t: number; m: string; kind: 'step' | 'ok' | 'err' | 'info' };
+
+/** Parse a job log into friendly, animated lines for the UI. Raw text stays in
+ *  the DB; this is what a person actually wants to read while waiting. */
+function logLines(jobId?: string): LogLine[] {
+  if (!jobId) return [];
+  const row = rawDb().prepare(`select log, status, error from jobs where id=?`).get(jobId) as
+    | { log: string; status: string; error: string } | undefined;
+  if (!row) return [];
+  const out: LogLine[] = [];
+  const seen = new Set<number>();
+  for (const rawLine of String(row.log ?? '').split('\n')) {
+    const m = rawLine.match(/^\[([^\]]+)\]\s*(.*)$/);
+    if (!m) continue;
+    const t = Date.parse(m[1]);
+    const text = m[2].trim();
+    if (!text || seen.has(t)) continue;
+    seen.add(t);
+    if (/^FAILED:/.test(text)) continue; // rendered separately as the error
+    out.push({ t, m: friendlyStepLine(text), kind: stepKind(text) });
+  }
+  if (row.status === 'done') out.push({ t: Date.now(), m: 'finished successfully', kind: 'ok' });
+  if (row.status === 'failed' && row.error) out.push({ t: Date.now(), m: row.error, kind: 'err' });
+  return out.slice(-40);
+}
+
+function friendlyStepLine(text: string): string {
+  const s = friendlyStep(text);
+  return s === 'working' ? text.replace(/\.$/, '') : s;
+}
+
+function stepKind(text: string): 'step' | 'ok' | 'err' | 'info' {
+  if (/running|started|done|ok|created|reserved|registered/i.test(text)) return 'ok';
+  if (/waiting|cleaning|settling|writing/i.test(text)) return 'info';
+  if (/delete|destroy|remov/i.test(text)) return 'err';
+  return 'step';
 }
 
 /** lifecycle actions: start | stop | delete */
