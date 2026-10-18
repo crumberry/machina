@@ -43,6 +43,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       planId: body.planId ?? r.plan_id,
       imageId: body.imageId ?? (r.image_id ?? undefined),
       actorName: admin.name, actorRole: 'admin',
+      // Quota counts pending requests as reservations. Exclude THIS one or the
+      // approval counts its own request against itself and refuses a request
+      // that exactly fits the user's quota.
+      excludeRequestId: id,
     });
     rawDb().prepare(`update instance_requests set status='approved', reviewed_by=?, reviewed_at=?, result_instance_id=?, review_note=? where id=?`).run(
       admin.id, now(), inst.id, (body.note ?? '').trim().slice(0, 280) || null, id);

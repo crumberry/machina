@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { QuotaEditor } from '@/app/ui/quota';
 import { ThinkingOrb } from 'thinking-orbs';
 import { BorderBeam } from 'border-beam';
 import { useToast } from '@/app/ui/toast';
@@ -33,6 +34,15 @@ export default function AdminPage() {
   const [instName, setInstName] = useState('');
   const [instPlan, setInstPlan] = useState('');
   const [instImage, setInstImage] = useState('');
+  const [quotas, setQuotas] = useState<{
+    rows: {
+      userId: string; name: string; role: string;
+      quota: { maxVms: number | null; maxVcpus: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; maxRunning: number | null; suspended: boolean; note: string | null };
+      usage: { vms: number; running: number; vcpus: number; memoryMb: number; diskGb: number };
+      balanceCents: number;
+    }[];
+    host: { committed: { vms: number; running: number; vcpus: number; memoryMb: number; diskGb: number }; capacity: { memoryMb: number; vcpus: number; ramOvercommit: number } };
+  } | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/admin?limit=50&offset=${auditOffset}`, { cache: 'no-store' });
@@ -46,6 +56,8 @@ export default function AdminPage() {
     if (rq.ok) setReqs(await rq.json());
     const dq = await fetch('/api/deletion', { cache: 'no-store' });
     if (dq.ok) setDelReqs(await dq.json());
+    const qq = await fetch('/api/quotas', { cache: 'no-store' });
+    if (qq.ok) setQuotas(await qq.json());
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -64,6 +76,30 @@ export default function AdminPage() {
     <>
       <h1>admin</h1>
       <div className="sub">users, credits, images, plans, audit trail</div>
+
+      <div className="card">
+        <h3>quotas</h3>
+        <div className="sub" style={{ marginTop: -6, marginBottom: 12 }}>
+          What each account is allowed to provision. Blank means unlimited, 0 means none.
+          Requests over quota are refused at request time, and re-checked when you approve.
+        </div>
+        {quotas?.host && (
+          <div className="hostcap">
+            <span>
+              <strong>{quotas.host.committed.running}</strong> running of 20 max
+            </span>
+            <span>
+              <strong>{Math.round(quotas.host.committed.memoryMb / 1024)}</strong> GB RAM committed
+              {quotas.host.capacity.memoryMb > 0 && <> of {Math.round((quotas.host.capacity.memoryMb * quotas.host.capacity.ramOvercommit) / 1024)} GB ceiling</>}
+            </span>
+            <span>
+              <strong>{quotas.host.committed.diskGb}</strong> GB disk committed
+            </span>
+          </div>
+        )}
+        {quotas ? <QuotaEditor data={quotas} onSaved={() => void load()} />
+          : <div className="muted">loading quotas…</div>}
+      </div>
 
       <div className="card">
         <h3>credits</h3>

@@ -175,6 +175,19 @@ export const metrics = sqliteTable('metrics', {
   allocB: integer('alloc_b').default(0).notNull(),
 }, (t) => [primaryKey({ columns: [t.instanceId, t.ts] }), index('metrics_ts_idx').on(t.ts)]);
 
+/** Per-user resource quota. NULL = unlimited, 0 = none allowed. */
+export const quotas = sqliteTable('quotas', {
+  userId: text('user_id').primaryKey(),
+  maxVms: integer('max_vms'),
+  maxVcpus: integer('max_vcpus'),
+  maxMemoryMb: integer('max_memory_mb'),
+  maxDiskGb: integer('max_disk_gb'),
+  maxRunning: integer('max_running'),
+  suspended: integer('suspended').default(0).notNull(),
+  note: text('note'),
+  updatedAt: integer('updated_at').notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Instance = typeof instances.$inferSelect;
 export type Job = typeof jobs.$inferSelect;

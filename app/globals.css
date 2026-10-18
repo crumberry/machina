@@ -438,3 +438,27 @@ input.bad { border-color: var(--danger); }
   letter-spacing: .06em; margin: 4px 0 6px;
 }
 .chartbox { height: 190px; margin-bottom: 20px; }
+
+/* ------------------------------------------------------------------ quotas */
+.hostcap {
+  display: flex; gap: 22px; flex-wrap: wrap; font-size: 12px;
+  color: var(--text-2); margin-bottom: 14px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2);
+}
+.hostcap strong { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+
+.quotatable { width: 100%; font-size: 13px; }
+.quotatable th { text-align: left; color: var(--text-3); font-weight: 500; padding: 6px 10px 6px 0; }
+.quotatable td { padding: 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.quotaedit { background: var(--surface-2); }
+.qfield { display: grid; gap: 3px; font-size: 11px; color: var(--text-3); }
+.qfield input { width: 84px; padding: 5px 8px; font-size: 13px; }
+
+.meter { display: inline-flex; align-items: center; gap: 6px; }
+.meter .bar {
+  display: inline-block; width: 56px; height: 4px; border-radius: 2px;
+  background: var(--line); overflow: hidden; flex: none;
+}
+.meter .fill { display: block; height: 100%; background: var(--accent); }
+.meter .bar.over .fill { background: var(--danger); }

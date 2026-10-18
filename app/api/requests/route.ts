@@ -8,6 +8,7 @@ import { now } from '@/lib/core/util';
 import { newId } from '@/lib/core/crypto';
 import { rateLimit } from '@/lib/core/crypto';
 import { logAudit } from '@/lib/services/audit';
+import { checkQuota } from '@/lib/core/quota';
 
 export async function GET() {
   const user = await requireUser();
@@ -37,6 +38,13 @@ export async function POST(req: NextRequest) {
   const rd = rawDb();
   const dupe = rd.prepare(`select 1 from instance_requests where user_id=? and name=? and status='pending'`).get(user.id, name);
   if (dupe) return err('a pending request with that name already exists', 409);
+
+  // Quota is checked HERE as well as at approval. Telling someone their request
+  // is fine and only failing when an admin approves it wastes their time and the
+  // admin's; approving a request that cannot be honoured is worse. The check is
+  // re-run at approval because quota and other approvals move in between.
+  const verdict = checkQuota(user.id, { vcpu: plan.vcpu, ramMb: plan.ramMb, diskGb: plan.diskGb });
+  if (!verdict.allowed) return err(verdict.reason, 403);
 
   const id = newId('req_');
   rawDb().prepare(`insert into instance_requests (id,user_id,name,plan_id,image_id,note,status,created_at) values (?,?,?,?,?,?,?,?)`).run(

@@ -6,6 +6,7 @@ import { newInstanceId, now } from '@/lib/core/util';
 import { encrypt, randToken, randPassword } from '@/lib/core/crypto';
 import { config } from '@/lib/config';
 import { macFromId, IpAllocator } from '@/lib/core/driver';
+import { checkQuota } from '@/lib/core/quota';
 import { logAudit } from '@/lib/services/audit';
 
 export type ProvisionArgs = {
@@ -15,6 +16,9 @@ export type ProvisionArgs = {
   imageId?: string;
   actorName?: string;
   actorRole?: string;
+  /** Pending request being fulfilled; excluded from the quota sum so approving a
+   *  request does not count that request against itself. */
+  excludeRequestId?: string;
 };
 
 /** Shared provisioning entry point used by direct (admin) create and by
@@ -30,18 +34,36 @@ export async function provisionInstance(a: ProvisionArgs): Promise<{ id: string;
 
   let imageId = a.imageId ?? '';
   if (!dbUser.imagePickable && dbUser.assignedImageId) imageId = dbUser.assignedImageId;
+
+  // A request that did not name an image used to fail approval with the
+  // bewildering "image not ready", because the lookup ran against the empty
+  // string. Fall back in a defined order instead: the user's assigned image,
+  // then the first image that is actually ready. An admin approving a request
+  // can still override with an explicit imageId.
+  if (!imageId && dbUser.assignedImageId) imageId = dbUser.assignedImageId;
+  if (!imageId) {
+    const [fallback] = await db.select().from(images)
+      .where(eq(images.status, 'ready'))
+      .orderBy(images.name);
+    imageId = fallback?.id ?? '';
+  }
   const [image] = await db.select().from(images).where(eq(images.id, imageId));
-  if (!image || image.status !== 'ready') throw new Error('image not ready');
+  if (!image) throw new Error('no OS image is available on the host yet — an admin needs to add one first');
+  if (image.status !== 'ready') throw new Error(`OS image "${image.id}" is ${image.status}, not ready`);
 
   if (dbUser.balanceCents < plan.hourlyRateCents) throw new Error('insufficient balance for 1h at plan rate');
 
+  // Quota AND host capacity, in one place. Every create path (admin create,
+  // request approval) funnels through here, so this is the only place that has
+  // to be right — an enforcement check that lives in one caller and not the
+  // other is not enforcement, it is a suggestion.
+  const verdict = checkQuota(a.userId, { vcpu: plan.vcpu, ramMb: plan.ramMb, diskGb: plan.diskGb }, {
+    isAdmin: a.actorRole === 'admin',
+    excludeRequestId: a.excludeRequestId,
+  });
+  if (!verdict.allowed) throw new Error(verdict.reason);
+
   const rd = rawDb();
-  const runningTotal = (rd.prepare(`select count(*) c from instances where status='running'`).get() as { c: number }).c;
-  if (runningTotal >= config.limits.maxRunningTotal) throw new Error('host at capacity; try later');
-  if (a.actorRole !== 'admin') {
-    const mine = (rd.prepare(`select count(*) c from instances where user_id=? and status='running'`).get(a.userId) as { c: number }).c;
-    if (mine >= config.limits.maxRunningPerUser) throw new Error(`running instance cap (${config.limits.maxRunningPerUser}) reached`);
-  }
   const dupe = rd.prepare(`select 1 from instances where user_id=? and name=?`).get(a.userId, a.name);
   if (dupe) throw new Error('name already used');
 

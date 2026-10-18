@@ -225,6 +225,29 @@ export const migrations: { version: string; sql: string }[] = [
     `,
   },
   {
+    version: '20261018_0008',
+    sql: `
+      -- Per-user resource quota. This is the whole point of the product: an
+      -- admin hands someone an account and says "you may have 2 VMs, 4 vCPU,
+      -- 4 GB RAM, 40 GB disk", and provisioning refuses anything past that.
+      -- v2 had only two blunt global caps (maxRunningPerUser / maxRunningTotal)
+      -- which is not a quota, it is a suggestion.
+      -- NULL means unlimited. 0 means literally zero, which is a real and
+      -- useful answer ("this account is provisioned but may not create").
+      create table if not exists quotas (
+        user_id text primary key,
+        max_vms integer,
+        max_vcpus integer,
+        max_memory_mb integer,
+        max_disk_gb integer,
+        max_running integer,
+        suspended integer not null default 0,
+        note text,
+        updated_at integer not null
+      );
+    `,
+  },
+  {
     version: '20261018_0007',
     sql: `
       -- Raw hypervisor counters, sampled every METRICS_SAMPLE_MS. Deliberately
