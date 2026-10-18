@@ -1,6 +1,7 @@
 import net from 'net';
 import fs from 'fs';
 import type { WebSocket } from 'ws';
+import { attachKeepalive } from './ws-keepalive';
 
 /**
  * VNC console relay: browser WS <-> per-instance VNC unix socket. RFB is
@@ -14,6 +15,13 @@ export function relayVnc(ws: WebSocket, socketPath: string): void {
     try { ws.close(); } catch {}
     return;
   }
+
+  // An untouched VNC session is as silent as an untouched shell, so it gets
+  // the same keepalive for the same reason.
+  const stopKeepalive = attachKeepalive(ws);
+  const stopAll = () => { stopKeepalive(); };
+  ws.on('close', stopAll);
+  ws.on('error', stopAll);
 
   const sock = net.connect({ path: socketPath });
   let sockReady = false;

@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import { attachKeepalive } from './ws-keepalive';
 
 /**
  * Web terminal: browser WS <-> ssh2 session on the guest (root@guest-ip:22,
@@ -14,9 +15,15 @@ export async function relayTerm(ws: WebSocket, bind: TermBind): Promise<void> {
   let closed = false;
   let conn: import('ssh2').Client | null = null;
 
+  // Must be armed immediately, not after the ssh handshake: the SSH connect
+  // alone can outlast the proxy's idle timeout, and a socket that dies before
+  // this line runs never gets a chance to be kept alive.
+  const stopKeepalive = attachKeepalive(ws);
+
   const close = (why: string) => {
     if (closed) return;
     closed = true;
+    stopKeepalive();
     try { conn?.end(); } catch {}
     try { ws.close(); } catch {}
     console.log(`[term] ${bind.instanceId} closed: ${why}`);

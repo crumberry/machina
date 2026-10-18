@@ -201,15 +201,41 @@ export default function InstanceDetail() {
 
 function Terminal({ instanceId }: { instanceId: string }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const connRef = useRef<{ ws: WebSocket; dispose: () => void } | null>(null);
+  const connRef = useRef<WebSocket | null>(null);
+  const termRef = useRef<import('@xterm/xterm').Terminal | null>(null);
+  const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+  const aliveRef = useRef(true);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triesRef = useRef(0);
   const [state, setState] = useState<WsState>('idle');
   const [err, setErr] = useState('');
 
+  /**
+   * Reconnect on an unexpected close. The server heartbeat stops the routine
+   * case (proxy idle reaping), but a dropped tunnel, a NAT rebind or a slept
+   * laptop still disconnect, and previously that left a dead terminal until
+   * the user navigated away. Backoff caps at 10s so it cannot hammer the
+   * origin if the instance itself is gone.
+   */
+  const scheduleReconnect = useCallback(() => {
+    if (!aliveRef.current) return;
+    if (retryRef.current) return;
+    const delay = Math.min(1000 * 2 ** triesRef.current, 10_000);
+    triesRef.current = Math.min(triesRef.current + 1, 4);
+    setState('closed');
+    termRef.current?.write('\r\n\x1b[2m— connection lost, reconnecting…\x1b[0m\r\n');
+    retryRef.current = setTimeout(() => {
+      retryRef.current = null;
+      void connectRef.current?.();
+    }, delay);
+  }, []);
+
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
+
   const connect = useCallback(async () => {
-    if (connRef.current) return;
+    if (connRef.current || !aliveRef.current) return;
     setState('connecting');
     setErr('');
-    let term: import('@xterm/xterm').Terminal | null = null;
     try {
       const [{ Terminal }, { FitAddon }, xtermCss] = await Promise.all([
         import('@xterm/xterm'),
@@ -217,67 +243,108 @@ function Terminal({ instanceId }: { instanceId: string }) {
         import('@xterm/xterm/css/xterm.css'),
       ]);
       void xtermCss;
+
+      // ONE xterm instance for the lifetime of the mount. Reconnecting swaps the
+      // websocket only, so scrollback survives a drop instead of being wiped.
+      if (!termRef.current) {
+        const t = new Terminal({
+          cursorBlink: true, fontFamily: '"JetBrains Mono", monospace', fontSize: 13,
+          scrollback: 5000,
+        });
+        const f = new FitAddon();
+        t.loadAddon(f);
+        termRef.current = t;
+        fitRef.current = f;
+      }
+      const term = termRef.current;
+
       const tok = await (await fetch(`/api/instances/${instanceId}/ws-token`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ type: 'term' }),
       })).json();
+      if (!tok?.token) throw new Error(tok?.error ?? 'could not get a terminal token');
+
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/api/instances/${instanceId}/terminal?token=${tok.token}`);
       ws.binaryType = 'arraybuffer'; // server streams stdout as binary frames
+      connRef.current = ws;
 
-      term = new Terminal({ cursorBlink: true, fontFamily: '"JetBrains Mono", monospace', fontSize: 13 });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.onData((d) => ws.send(JSON.stringify({ t: 'i', d: btoa(unescape(encodeURIComponent(d))) })));
+      // Input and resize are bound once against the CURRENT socket. Rebinding
+      // these per connect would stack listeners and duplicate every keystroke.
+      term.onData((d) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ t: 'i', d: btoa(unescape(encodeURIComponent(d))) }));
+        }
+      });
       term.onResize(({ cols, rows }) => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'r', c: cols, r: rows }));
       });
-      const fitLater = () => { try { fit.fit(); } catch { /* not laid out yet */ } };
+      const fitLater = () => { try { fitRef.current?.fit(); } catch { /* not laid out yet */ } };
       window.addEventListener('resize', fitLater);
 
       ws.onopen = () => {
         const box = boxRef.current;
-        if (!box || !term) return;
-        box.innerHTML = '';
-        term.open(box);
+        if (!box) return;
+        if (!term.element?.parentElement) { box.innerHTML = ''; term.open(box); }
         fitLater();
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'r', c: term.cols, r: term.rows }));
+        triesRef.current = 0;
         setState('open');
-        connRef.current = {
-          ws,
-          dispose: () => { try { ws.close(); } catch {} try { term?.dispose(); } catch {} },
-        };
+        setErr('');
+        // A shell is a new session, not the old one resumed. Say so, or the
+        // user types into a prompt that no longer has their history.
+        term.write('\r\n\x1b[2m— connected\x1b[0m\r\n');
       };
       ws.onmessage = (ev) => {
-        if (ev.data instanceof ArrayBuffer) { term?.write(new Uint8Array(ev.data)); return; }
+        if (ev.data instanceof ArrayBuffer) { termRef.current?.write(new Uint8Array(ev.data)); return; }
         if (typeof ev.data === 'string') {
           try {
             const j = JSON.parse(ev.data) as { t: string; d?: string };
-            if (j.t === 'e') { setErr(j.d ?? 'terminal error'); setState('error'); }
+            if (j.t === 'e') setErr(j.d ?? 'terminal error');
           } catch { /* ignore */ }
         }
       };
       ws.onclose = () => {
-        if (state === 'open' || state === 'connecting') setState('closed');
-        connRef.current = null;
+        if (connRef.current === ws) connRef.current = null;
         window.removeEventListener('resize', fitLater);
-        term?.dispose();
+        scheduleReconnect();
       };
-      ws.onerror = () => { setState('error'); setErr('websocket error'); };
+      ws.onerror = () => { setErr('websocket error'); };
     } catch (e) {
       setErr(String((e as Error).message));
-      setState('error');
+      connRef.current = null;
+      scheduleReconnect();
     }
-  }, [instanceId, state]);
+  }, [instanceId, scheduleReconnect]);
+  connectRef.current = connect;
 
-  useEffect(() => () => connRef.current?.dispose(), []);
-
-  // auto-connect once when the tab mounts — the terminal is the point of the page
-  const autoRef = useRef(false);
   useEffect(() => {
-    if (autoRef.current) return;
-    autoRef.current = true;
+    aliveRef.current = true;
     void connect();
+    // Returning to a backgrounded tab is exactly when a dropped socket must be
+    // repaired, and it is also the one moment the browser is not throttling
+    // timers — so reconnect at once instead of waiting out the backoff.
+    const onWake = () => {
+      if (document.visibilityState === 'hidden') return;
+      const c = connRef.current;
+      if (c && (c.readyState === WebSocket.OPEN || c.readyState === WebSocket.CONNECTING)) return;
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
+      triesRef.current = 0;
+      void connectRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('online', onWake);
+    return () => {
+      aliveRef.current = false;
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('online', onWake);
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
+      try { connRef.current?.close(); } catch { /* already gone */ }
+      connRef.current = null;
+      try { termRef.current?.dispose(); } catch { /* already gone */ }
+      termRef.current = null;
+      fitRef.current = null;
+    };
   }, [connect]);
 
   return (
@@ -298,7 +365,7 @@ function Terminal({ instanceId }: { instanceId: string }) {
               : state === 'error'
                 ? <span style={{ color: 'var(--danger)' }}>{err || 'error'}</span>
                 : state === 'closed'
-                  ? 'disconnected — click connect to reopen'
+                  ? 'connection lost — reconnecting…'
                   : 'starting shell…'}
           </div>
         )}
@@ -312,15 +379,16 @@ function Terminal({ instanceId }: { instanceId: string }) {
 function Console({ instanceId }: { instanceId: string }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const rfbRef = useRef<{ disconnect: () => void } | null>(null);
+  const aliveRef = useRef(true);
+  const userClosedRef = useRef(false);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triesRef = useRef(0);
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
   const [state, setState] = useState<WsState>('idle');
   const [err, setErr] = useState('');
 
-  useEffect(() => () => rfbRef.current?.disconnect(), []);
-
-  // auto-connect once — same posture as the terminal tab
-  useEffect(() => { void connect(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-
   const connect = async () => {
+    if (!aliveRef.current || userClosedRef.current) return;
     setState('connecting');
     setErr('');
     try {
@@ -329,26 +397,64 @@ function Console({ instanceId }: { instanceId: string }) {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ type: 'vnc' }),
       })).json();
+      if (!tok?.token) throw new Error(tok?.error ?? 'could not get a console token');
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const wsUrl = `${proto}://${location.host}/api/instances/${instanceId}/console?token=${tok.token}`;
       const box = boxRef.current;
       if (!box) return;
       const rfb = new RFB(box, wsUrl, {});
       rfb.scaleViewport = true;
-      rfb.addEventListener('disconnect', () => setState('closed'));
-      rfb.addEventListener('connect', () => setState('open'));
+      // An idle VNC session is silent too, so it is reaped by the same proxy
+      // rule as the terminal. Retry unless the user asked for the disconnect.
+      rfb.addEventListener('disconnect', () => {
+        setState('closed');
+        if (!aliveRef.current || userClosedRef.current) return;
+        const delay = Math.min(1000 * 2 ** triesRef.current, 10_000);
+        triesRef.current = Math.min(triesRef.current + 1, 4);
+        if (retryRef.current) return;
+        retryRef.current = setTimeout(() => {
+          retryRef.current = null;
+          void connectRef.current?.();
+        }, delay);
+      });
+      rfb.addEventListener('connect', () => { triesRef.current = 0; setState('open'); });
       rfbRef.current = rfb as unknown as { disconnect: () => void };
     } catch (e) {
       setErr(String((e as Error).message));
       setState('error');
     }
   };
+  connectRef.current = connect;
+
+  useEffect(() => {
+    aliveRef.current = true;
+    userClosedRef.current = false;
+    void connect();
+    const onWake = () => {
+      if (document.visibilityState === 'hidden' || userClosedRef.current) return;
+      const r = rfbRef.current;
+      if (r) return;
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
+      triesRef.current = 0;
+      void connectRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('online', onWake);
+    return () => {
+      aliveRef.current = false;
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('online', onWake);
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
+      rfbRef.current?.disconnect();
+      rfbRef.current = null;
+    };
+  }, [instanceId]);
 
   return (
     <div>
       <div className="row" style={{ marginBottom: 6 }}>
-        <button onClick={() => void connect()} disabled={state === 'connecting' || state === 'open'}>connect</button>
-        <button onClick={() => { rfbRef.current?.disconnect(); rfbRef.current = null; }} disabled={state !== 'open'}>disconnect</button>
+        <button onClick={() => { userClosedRef.current = false; void connect(); }} disabled={state === 'connecting' || state === 'open'}>connect</button>
+        <button onClick={() => { userClosedRef.current = true; rfbRef.current?.disconnect(); rfbRef.current = null; setState('closed'); }} disabled={state !== 'open'}>disconnect</button>
         <span className="muted">{state}{err ? ` — ${err}` : ''}</span>
       </div>
       <div style={{ position: 'relative' }}>
@@ -360,7 +466,7 @@ function Console({ instanceId }: { instanceId: string }) {
               : state === 'error'
                 ? <span style={{ color: 'var(--danger)' }}>{err || 'error'}</span>
                 : state === 'closed'
-                  ? 'disconnected — click connect to reopen'
+                  ? 'connection lost — reconnecting…'
                   : 'starting console…'}
           </div>
         )}
