@@ -41,6 +41,11 @@ export const ORB_FOR: Record<string, OrbState> = {
   'instance.start': 'connecting',
   'instance.stop': 'solving',
   'instance.delete': 'solving',
+  // snapshots: writing one is shaping (building a copy), rolling back and
+  // deleting are solving (undoing something).
+  'instance.snapshot': 'shaping',
+  'instance.snapshot-revert': 'solving',
+  'instance.snapshot-delete': 'solving',
   downloading: 'searching',
   'image.sync': 'searching',
   syncing: 'searching',

@@ -6,6 +6,7 @@ import { copyText } from '@/app/ui/clipboard';
 import { relTime } from '@/app/ui/time';
 import { StatusCue } from '@/app/ui/status';
 import { LogStream } from '@/app/ui/logstream';
+import { SnapshotsPanel } from '@/app/ui/snapshots';
 import { Ring, Orb, BarLoader } from '@/app/ui/loaders';
 
 type Inst = {
@@ -36,7 +37,7 @@ export default function InstanceDetail() {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [tab, setTab] = useState<'term' | 'vnc' | 'info' | 'logs'>('term');
+  const [tab, setTab] = useState<'term' | 'vnc' | 'snapshots' | 'info' | 'logs'>('term');
 
   const load = useCallback(async (id: string) => {
     const r = await fetch(`/api/instances/${id}`, { cache: 'no-store' });
@@ -131,9 +132,9 @@ export default function InstanceDetail() {
       </div>
 
       <div className="tabs">
-        {(['term', 'vnc', 'info', 'logs'] as const).map((t) => (
+        {(['term', 'vnc', 'snapshots', 'info', 'logs'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={tab === t ? 'active' : ''}>
-            {t === 'term' ? 'terminal' : t === 'vnc' ? 'console (VNC)' : t === 'info' ? 'information' : 'activity'}
+            {t === 'term' ? 'terminal' : t === 'vnc' ? 'console (VNC)' : t === 'snapshots' ? 'snapshots' : t === 'info' ? 'information' : 'activity'}
           </button>
         ))}
       </div>
@@ -145,6 +146,9 @@ export default function InstanceDetail() {
         {tab === 'vnc' && (inst.status === 'running'
           ? <Console instanceId={inst.id} />
           : <div className="muted">console available when running</div>)}
+        {tab === 'snapshots' && (
+          <SnapshotsPanel instanceId={inst.id} instanceStatus={inst.status} />
+        )}
         {tab === 'logs' && (
           <LogStream lines={inst.logLines ?? []} live={inst.status === 'provisioning'} height={340} />
         )}

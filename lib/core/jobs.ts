@@ -14,6 +14,9 @@ export type JobType =
   | 'instance.start'
   | 'instance.stop'
   | 'instance.delete'
+  | 'instance.snapshot'
+  | 'instance.snapshot-revert'
+  | 'instance.snapshot-delete'
   | 'image.sync';
 
 /** Enqueue a job. Workers poll status in ('queued','running'). */

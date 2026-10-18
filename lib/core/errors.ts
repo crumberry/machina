@@ -18,6 +18,13 @@ const RULES: [RegExp, string][] = [
   [/ENOSPC/i, 'the host disk is full'],
   [/ETIMEDOUT|ENOTFOUND|EAI_AGAIN/i, 'the host could not reach the download mirror'],
   [/image.*(failed|hash|mismatch)/i, 'the OS image failed verification'],
+  [/snapshot limit reached/i, 'you have hit the snapshot limit — delete one before taking another'],
+  [/not enough free space on the host/i, 'the host is low on disk space, so snapshots are paused'],
+  [/disk has grown to/i, 'the disk outgrew its plan size, so snapshots are paused'],
+  [/newer snapshots made on top of it/i, 'that snapshot has newer ones on top of it — delete those first'],
+  [/newer snapshot.* on top of it/i, 'that snapshot has newer ones on top of it — delete those first'],
+  [/no snapshot named/i, 'that snapshot no longer exists'],
+  [/snapshot names must be/i, 'use a simple name: lowercase letters, digits and dashes'],
 ];
 
 export function friendlyError(raw: unknown): string {
@@ -46,6 +53,16 @@ const STEP_MAP: [RegExp, string][] = [
   [/syncing|synced/i, 'downloading the OS image'],
   [/destroy\+undefine/i, 'destroying the VM'],
   [/rm seed/i, 'cleaning up'],
+  // snapshot steps
+  [/snapshot taken/i, 'snapshot saved'],
+  [/freezing disk|snapshotting disk/i, 'writing the snapshot'],
+  [/recording snapshot/i, 'recording the snapshot'],
+  [/reverting disk to/i, 'rolling the disk back'],
+  [/clean revert/i, 'clean revert: shutting down first'],
+  [/restarting instance/i, 'starting the instance again'],
+  [/guest ignored ACPI/i, 'guest ignored the shutdown request; forced off'],
+  [/deleting snapshot/i, 'deleting the snapshot'],
+  [/settle before revert/i, 'settling billing before rollback'],
 ];
 
 export function friendlyStep(log: string): string {

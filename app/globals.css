@@ -372,3 +372,45 @@ kbd {
 .statcard { padding: 14px; }
 .statcard .label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .statcard .value { font-family: 'JetBrains Mono', monospace; font-size: 22px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- snapshots */
+.snapwrap { padding-top: 4px; }
+.snaphead {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 14px;
+}
+.snapcount { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+
+.snapnew {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; margin-bottom: 16px; background: var(--surface-2);
+}
+.snappresets { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.chip {
+  padding: 3px 10px; font-size: 12px; border-radius: 999px;
+  color: var(--text-2); font-family: 'JetBrains Mono', monospace;
+}
+.chip:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-dim); }
+.snaprow { display: flex; gap: 8px; flex-wrap: wrap; }
+.snaprow input { flex: 1 1 160px; min-width: 0; }
+.snaprow button { flex: none; }
+input.bad { border-color: var(--danger); }
+
+/* notices are inline, sentence-case, and never steal focus */
+.notice {
+  border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.5;
+  border: 1px solid var(--line);
+}
+.notice.err { background: #2a1415; border-color: #58282a; color: #fca5a5; }
+.notice.warn { background: #2a2413; border-color: #5a4a26; color: #fcd34d; }
+
+.snaptable { width: 100%; font-size: 13px; }
+.snaptable th { text-align: left; color: var(--text-3); font-weight: 500; padding: 6px 10px 6px 0; }
+.snaptable td { padding: 9px 10px 9px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.snapacts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.snapacts button { padding: 4px 10px; font-size: 12px; }
+
+@media (max-width: 640px) {
+  .snaprow { flex-direction: column; }
+  .snapacts { justify-content: flex-start; }
+}

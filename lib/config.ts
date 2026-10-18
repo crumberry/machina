@@ -42,6 +42,14 @@ export const config = {
     shutdownGraceSec: 45,
     fixedHourlyRateCents: 3000, // fallback cost per INSTANCE.running-hour (30c)
     defaultBalanceCents: 5000,
+    // Snapshots are the classic rented-VM footgun: cheap to request, and the
+    // qcow2 grows with every one of them. Bounded per instance AND against
+    // free space on the pool, or one tenant fills the host.
+    maxSnapshotsPerInstance: 8,
+    // Refuse a new snapshot once the overlay has grown past plan disk * this.
+    snapshotGrowthRatio: 1.5,
+    // Never create a snapshot with less than this free on the vms pool.
+    snapshotFreeSpaceFloorMb: 2048,
   },
   masterKey: process.env.MACHINA_MASTER_KEY || '',
   host: {

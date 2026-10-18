@@ -147,9 +147,25 @@ export const netMonthly = sqliteTable('net_monthly', {
   updatedAt: integer('updated_at').default(0).notNull(),
 }, (t) => [primaryKey({ columns: [t.instanceId, t.month] })]);
 
+/** Tenant-facing index of libvirt snapshots held inside an instance's qcow2. */
+export const snapshots = sqliteTable('snapshots', {
+  id: text('id').primaryKey(),
+  instanceId: text('instance_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description').default('').notNull(),
+  state: text('state').default('disk').notNull(), // disk | running
+  sizeBytes: integer('size_bytes').default(0).notNull(),
+  current: integer('current').default(0).notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (t) => [
+  unique('uniq_snap_inst_name').on(t.instanceId, t.name),
+  index('snapshots_inst_idx').on(t.instanceId),
+]);
+
 export type User = typeof users.$inferSelect;
 export type Instance = typeof instances.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Plan = typeof plans.$inferSelect;
 export type Image = typeof images.$inferSelect;
 export type SshKey = typeof sshKeys.$inferSelect;
+export type Snapshot = typeof snapshots.$inferSelect;

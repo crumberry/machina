@@ -204,6 +204,26 @@ export const migrations: { version: string; sql: string }[] = [
         and created_at < 1792280000000;
     `,
   },
+  {
+    version: '20261018_0006',
+    sql: `
+      -- Snapshot bookkeeping. libvirt holds the real snapshot metadata inside
+      -- the qcow2; this table is the tenant-facing index (ownership, label,
+      -- size) and survives 'virsh snapshot-list' being unavailable.
+      create table if not exists snapshots (
+        id text primary key,
+        instance_id text not null,
+        name text not null,
+        description text default '' not null,
+        state text default 'disk' not null,
+        size_bytes integer default 0 not null,
+        current integer default 0 not null,
+        created_at integer not null
+      );
+      create index if not exists snapshots_inst_idx on snapshots(instance_id);
+      create unique index if not exists snapshots_inst_name on snapshots(instance_id, name);
+    `,
+  },
 ];
 
 export function initDb(): void {
