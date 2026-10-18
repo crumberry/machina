@@ -179,8 +179,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return json({
       ok: true, action, name,
       note: mode === 'clean'
-        ? 'clean revert: shut down, roll back, start again'
-        : 'live revert: disk rolls back like a power cut, instance stays up',
+        ? 'shutting down, rolling the disk back, starting again'
+        : 'rolling the disk back under the running guest (like a power cut)',
     });
   }
   await enqueue({

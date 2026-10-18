@@ -224,6 +224,30 @@ export const migrations: { version: string; sql: string }[] = [
       create unique index if not exists snapshots_inst_name on snapshots(instance_id, name);
     `,
   },
+  {
+    version: '20261018_0007',
+    sql: `
+      -- Raw hypervisor counters, sampled every METRICS_SAMPLE_MS. Deliberately
+      -- stores CUMULATIVE counters, not pre-computed percentages: a rate is
+      -- then the delta between whatever two samples survived, so a missed or
+      -- delayed sample degrades to a longer averaging window instead of a gap,
+      -- and a counter reset (domain restart) is detectable and clampable at
+      -- read time rather than being baked in as a nonsense spike.
+      create table if not exists metrics (
+        instance_id text not null,
+        ts integer not null,
+        cpu_ns integer not null default 0,
+        ncpu integer not null default 0,
+        ram_kb integer not null default 0,
+        ram_max_kb integer not null default 0,
+        rd_b integer not null default 0,
+        wr_b integer not null default 0,
+        alloc_b integer not null default 0,
+        primary key (instance_id, ts)
+      );
+      create index if not exists metrics_ts_idx on metrics(ts);
+    `,
+  },
 ];
 
 export function initDb(): void {

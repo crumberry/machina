@@ -577,4 +577,81 @@ export async function diskUsage(
   }
 }
 
+// ---------------------------------------------------------------- metrics
+
+export type DomStats = {
+  /** Cumulative guest vCPU runtime in nanoseconds, summed over all vcpus. */
+  cpuTimeNs: number;
+  ncpu: number;
+  /** Guest RAM actually in use, KiB (balloon.current). */
+  ramKb: number;
+  /** RAM the guest was given, KiB (balloon.maximum). */
+  ramMaxKb: number;
+  rdBytes: number;
+  wrBytes: number;
+  /** Bytes the hypervisor has allocated for the guest disk. */
+  allocBytes: number;
+};
+
+/**
+ * Read a domain's live counters from the HYPERVISOR: cumulative vCPU time,
+ * balloon-reported guest RAM, and per-disk I/O counters.
+ *
+ * Deliberately NOT the QEMU guest agent. The agent is a QMP-style RPC channel
+ * that runs commands inside the guest — effectively root in every rented VM,
+ * and a per-tenant attack surface on a multi-tenant host. Everything needed for
+ * a load chart is already here, works on all six distros, and needs nothing
+ * installed in the guest. The cost is that guest-visible filesystem usage is
+ * unavailable, which the disk allocation figure covers well enough.
+ *
+ * Returns null for a domain that is gone or shut off rather than throwing, so
+ * one dead guest cannot abort a sweep over the others.
+ */
+export async function domStats(domainName: string): Promise<DomStats | null> {
+  let out: string;
+  try {
+    out = await virsh(['domstats', '--domain', domainName, '--vcpu', '--balloon', '--block'], 15_000);
+  } catch {
+    return null;
+  }
+  const kv = new Map<string, string>();
+  for (const line of out.split('\n')) {
+    const m = /^\s*([\w.]+)=(\S+)\s*$/.exec(line);
+    if (m) kv.set(m[1], m[2]);
+  }
+
+  let cpuTimeNs = 0;
+  let ncpu = 0;
+  for (const [k, v] of kv) {
+    const m = /^vcpu\.(\d+)\.time$/.exec(k);
+    if (!m) continue;
+    const t = Number(v);
+    if (Number.isFinite(t)) { cpuTimeNs += t; ncpu += 1; }
+  }
+  // A guest that never ran has no vcpu.N.time rows; fall back to the configured
+  // count so CPU% still divides by the right denominator (and reads 0).
+  if (!ncpu) ncpu = Number(kv.get('vcpu.current') ?? 0) || 0;
+
+  // block.N counters are per disk. Pick the guest disk by its path: the vms/
+  // pool is the instance's own disk, seeds/ is the read-only cloud-init ISO
+  // whose write counters are meaningless noise.
+  let rdBytes = 0;
+  let wrBytes = 0;
+  let allocBytes = 0;
+  for (const [k, v] of kv) {
+    const idx = /^block\.(\d+)\./.exec(k)?.[1];
+    if (idx === undefined) continue;
+    const path = kv.get(`block.${idx}.path`) ?? '';
+    if (!path.includes('/vms/')) continue;
+    if (k === `block.${idx}.rd.bytes`) rdBytes = Number(v) || 0;
+    if (k === `block.${idx}.wr.bytes`) wrBytes = Number(v) || 0;
+    if (k === `block.${idx}.allocation`) allocBytes = Number(v) || 0;
+  }
+
+  const ramKb = Number(kv.get('balloon.current') ?? 0) || 0;
+  const ramMaxKb = Number(kv.get('balloon.maximum') ?? 0) || 0;
+  if (!cpuTimeNs && !ramKb && !rdBytes && !wrBytes && !allocBytes) return null;
+  return { cpuTimeNs, ncpu, ramKb, ramMaxKb, rdBytes, wrBytes, allocBytes };
+}
+
 export { virsh, geniso };

@@ -162,6 +162,19 @@ export const snapshots = sqliteTable('snapshots', {
   index('snapshots_inst_idx').on(t.instanceId),
 ]);
 
+/** Raw hypervisor counters. Cumulative, so rates are derived at read time. */
+export const metrics = sqliteTable('metrics', {
+  instanceId: text('instance_id').notNull(),
+  ts: integer('ts').notNull(),
+  cpuNs: integer('cpu_ns').default(0).notNull(),
+  ncpu: integer('ncpu').default(0).notNull(),
+  ramKb: integer('ram_kb').default(0).notNull(),
+  ramMaxKb: integer('ram_max_kb').default(0).notNull(),
+  rdB: integer('rd_b').default(0).notNull(),
+  wrB: integer('wr_b').default(0).notNull(),
+  allocB: integer('alloc_b').default(0).notNull(),
+}, (t) => [primaryKey({ columns: [t.instanceId, t.ts] }), index('metrics_ts_idx').on(t.ts)]);
+
 export type User = typeof users.$inferSelect;
 export type Instance = typeof instances.$inferSelect;
 export type Job = typeof jobs.$inferSelect;

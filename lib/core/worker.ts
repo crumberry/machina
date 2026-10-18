@@ -2,6 +2,7 @@ import { rawDb } from '@/lib/db';
 import { config } from '@/lib/config';
 import { claimNext, finishJob } from './jobs';
 import { HANDLERS } from './handlers';
+import { sampleMetrics, pruneMetrics } from './metrics';
 import { now } from './util';
 import { friendlyError } from './errors';
 import type { Database } from 'better-sqlite3';
@@ -26,6 +27,8 @@ const HEAL_RUNNING_MS = 12 * 60_000; // a create running longer than this is wed
 let running = false;
 let timer: ReturnType<typeof setInterval> | null = null;
 let healTimer: ReturnType<typeof setInterval> | null = null;
+let metricsTimer: ReturnType<typeof setInterval> | null = null;
+let pruneTimer: ReturnType<typeof setInterval> | null = null;
 let stopped = false;
 
 export function startWorker(): void {
@@ -34,6 +37,13 @@ export function startWorker(): void {
   healTimer = setInterval(() => { try { healStuckProvisioning(); } catch (e) {
     console.log(`[worker] self-heal pass failed: ${(e as Error).message}`);
   } }, 30_000);
+  // Metrics ride their OWN timer. They must never share the job worker's loop:
+  // a sweep that blocked on a wedged guest would stall provisioning behind a
+  // cosmetic feature. sampleMetrics() is detached, internally guarded against
+  // overlap, and swallows its own failures.
+  metricsTimer = setInterval(() => { void sampleMetrics(); }, config.metrics.sampleMs);
+  void sampleMetrics();
+  pruneTimer = setInterval(() => { pruneMetrics(); }, 3600_000);
   // Boot-time recovery: jobs stranded in 'running' by a mid-job server death
   // are re-queued (a dead worker never marks them done).
   const { rawDb: db } = require('@/lib/db') as { rawDb(): Database };
@@ -94,6 +104,8 @@ export function stopWorker(): void {
   stopped = true;
   if (timer) { clearInterval(timer); timer = null; }
   if (healTimer) { clearInterval(healTimer); healTimer = null; }
+  if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+  if (pruneTimer) { clearInterval(pruneTimer); pruneTimer = null; }
 }
 
 export function wakingTick(): void {

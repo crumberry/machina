@@ -174,8 +174,11 @@ export function SnapshotsPanel({
           <div>
             <strong>Roll back to &ldquo;{confirm.snap.name}&rdquo;?</strong>{' '}
             {confirm.mode === 'clean'
-              ? 'The instance will be shut down cleanly, its disk rolled back, and started again. Anything written since the snapshot is lost.'
-              : 'The disk rolls back like a power cut while the instance keeps running. If the guest had unflushed writes, its filesystem may be left inconsistent.'}
+              ? 'The instance will be shut down first, its disk rolled back, then started again. Anything written since the snapshot is lost.'
+              : 'The disk rolls back under the running guest, like pulling the power. Its filesystem may be left needing a repair on next boot.'}
+            {' '}The snapshot captured the disk only, so the rolled-back filesystem is
+            exactly as consistent as it was at the moment the snapshot was taken{' '}
+            {confirm.mode === 'clean' && '(this snapshot was taken while the instance was running)'}.
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button
@@ -226,6 +229,7 @@ export function SnapshotsPanel({
                   <button
                     disabled={Boolean(busy) || !canAct || s.state === 'missing'}
                     onClick={() => setConfirm({ snap: s, mode: 'clean' })}
+                    title="Shut the instance down, roll back, start it again"
                   >
                     roll back
                   </button>

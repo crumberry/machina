@@ -51,6 +51,16 @@ export const config = {
     // Never create a snapshot with less than this free on the vms pool.
     snapshotFreeSpaceFloorMb: 2048,
   },
+  // Hypervisor metric sampling. 20s keeps the UI lively without the sampler
+  // ever competing with the job worker for libvirt. Retention is a flat
+  // window: at 20s that is 8640 rows per instance, pruned hourly.
+  metrics: {
+    sampleMs: parseInt(process.env.METRICS_SAMPLE_MS || '20000', 10),
+    retainMs: parseInt(process.env.METRICS_RETAIN_MS || String(48 * 3600 * 1000), 10),
+    // Per-instance virsh timeout inside a sweep. A wedged guest must not hold
+    // the sweep open past this.
+    perInstanceTimeoutMs: 12_000,
+  },
   masterKey: process.env.MACHINA_MASTER_KEY || '',
   host: {
     hostname: 'blade',

@@ -18,7 +18,7 @@ type Inst = {
 };
 type Plan = { id: string; name: string; vcpu: number; ramMb: number; diskGb: number; hourlyRateCents: number };
 type Img = { id: string; name: string; status: string };
-type Sample = { ts: number; running: number; weight: number };
+type Sample = { t: number; cpu: number; read: number; write: number };
 
 export default function InstancesPage() {
   const toast = useToast();
@@ -45,9 +45,16 @@ export default function InstancesPage() {
       const j: Inst[] = await r.json();
       setInsts(j);
       for (const i of j) {
-        fetch(`/api/instances/${i.id}/usage`, { cache: 'no-store' })
-          .then((x) => (x.ok ? x.json() : []))
-          .then((s) => setSpark((p) => ({ ...p, [i.id]: s })))
+        // Live hypervisor metrics. Only for running VMs: a stopped guest has
+        // no counters and would otherwise sit at a permanent flat zero that
+        // looks like "idle" rather than "off".
+        if (i.status !== 'running') {
+          setSpark((p) => ({ ...p, [i.id]: [] }));
+          continue;
+        }
+        fetch(`/api/instances/${i.id}/metrics?range=1h`, { cache: 'no-store' })
+          .then((x) => (x.ok ? x.json() : { points: [] }))
+          .then((m) => setSpark((p) => ({ ...p, [i.id]: m.points ?? [] })))
           .catch(() => {});
       }
     }
@@ -184,8 +191,13 @@ export default function InstancesPage() {
         )}
         {insts.map((i) => {
           const p = planById(i.planId);
-          const samples = spark[i.id] ?? [];
-          const data = samples.map((s) => ({ v: s.running ? Math.max(1, s.weight * 100) : 0 }));
+          const series = spark[i.id] ?? [];
+          // Real hypervisor CPU, not the old "was it running, weighted by
+          // billing hours" pseudo-metric. Empty until the sampler has two
+          // samples, which is why the fallback below is an explicit empty
+          // state rather than a fake line at zero.
+          const data = series.map((s) => ({ v: s.cpu }));
+          const live_ = i.status === 'running';
           const live = i.activeJob && (i.activeJob.status === 'running' || i.activeJob.status === 'queued');
           return (
             <div key={i.id} className="card card-hover" style={{ padding: 14, margin: 0, position: 'relative', overflow: 'hidden' }}>
@@ -195,18 +207,27 @@ export default function InstancesPage() {
               </div>
               <div className="muted mono" style={{ fontSize: 11, marginBottom: 8 }}>{i.ip} · {p?.name}</div>
               <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{p?.vcpu} vCPU · {p?.ramMb} MB RAM · {p?.diskGb} GB</div>
-              <div style={{ height: 46, marginBottom: 10 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
-                    <defs>
-                      <linearGradient id={`g-${i.id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="v" stroke="var(--accent)" strokeWidth={1.5} fill={`url(#g-${i.id})`} isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div style={{ height: 46, marginBottom: 4 }}>
+                {data.length > 1 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+                      <defs>
+                        <linearGradient id={`g-${i.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.5} />
+                          <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Area type="monotone" dataKey="v" stroke="var(--accent)" strokeWidth={1.5} fill={`url(#g-${i.id})`} isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="muted" style={{ fontSize: 11, display: 'flex', alignItems: 'center', height: '100%' }}>
+                    {live_ ? 'collecting samples…' : 'off — no load to show'}
+                  </div>
+                )}
+              </div>
+              <div className="muted" style={{ fontSize: 10, marginBottom: 8, letterSpacing: '.04em' }}>
+                CPU{series.length > 1 ? ` · now ${Math.round(series[series.length - 1].cpu)}%` : ''}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Link href={`/instances/${i.id}`} className="primary" style={{ padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}>open</Link>
